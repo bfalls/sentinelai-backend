@@ -25,7 +25,7 @@ class Event(BaseModel):
         default_factory=datetime.utcnow,
         description="Timestamp when the event occurred (UTC)",
     )
-    metadata: dict[str, Any] | None = Field(
+    event_metadata: dict[str, Any] | None = Field(
         default=None, description="Additional structured metadata for the event"
     )
 

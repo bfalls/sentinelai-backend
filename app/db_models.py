@@ -20,7 +20,7 @@ class EventRecord(Base):
     mission_id = Column(String, nullable=True, index=True)
     source = Column(String, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    metadata = Column(JSON, nullable=True)
+    event_metadata = Column(JSON, nullable=True)
 
 
 class AnalysisSnapshot(Base):

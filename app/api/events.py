@@ -44,7 +44,7 @@ async def create_event(event: Event, db: Session = Depends(get_db)) -> EventCrea
         mission_id=event.mission_id,
         source=event.source,
         timestamp=event.timestamp,
-        metadata=event.metadata,
+        event_metadata=event.metadata,
     )
 
     db.add(record)
