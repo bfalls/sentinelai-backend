@@ -9,6 +9,7 @@ import time
 from fastapi import FastAPI, Request
 
 from app.api import api_router
+from app.db import init_db
 
 LOG_LEVEL = os.getenv("SENTINELAI_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -17,6 +18,14 @@ logging.basicConfig(
 logger = logging.getLogger("sentinelai")
 
 app = FastAPI(title="SentinelAI Backend")
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    """Initialize application resources."""
+
+    init_db()
+    logger.info("Database initialized")
 
 
 @app.middleware("http")
