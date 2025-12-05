@@ -1,0 +1,18 @@
+{
+  "name": "sentinelai-backend",
+  "version": "1.0.0",
+  "description": "Backend service for **SentinelAI**, an AI-assisted situational awareness plugin for CivTAK.   It ingests real-world data feeds (e.g. aviation, ground tracks, weather), keeps a live in-memory view of the world, and exposes an API that turns **natural language requests** into **map overlays** for the CivTAK plugin.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "api:dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "api:test": "pytest -q",
+    "api:ping": "python -m scripts.ping_api",
+    "zip": "bash scripts/zip-src.sh",
+    "service:start": "ssh $SENTINEL_EC2_HOST 'sudo systemctl start sentinelai-backend.service'",
+    "service:stop": "ssh $SENTINEL_EC2_HOST 'sudo systemctl stop sentinelai-backend.service'"
+  },
+  "keywords": [],
+  "author": "Barnaby Falls <bfalls@outlook.com>",
+  "license": "ISC"
+}
