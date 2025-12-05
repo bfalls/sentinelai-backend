@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from typing import Optional
 
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app import db_models
 from app.db import get_db
 from app.models.analysis import AnalysisStatusResponse
+from app.services import AnalysisResult, get_analysis_engine
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
@@ -34,51 +35,41 @@ async def get_analysis_status(
 ) -> AnalysisStatusResponse:
     """Return a rule-based mission status derived from recent events."""
 
-    window_minutes = int(window_minutes)
-    cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
-
-    query = db.query(db_models.EventRecord).filter(db_models.EventRecord.timestamp >= cutoff)
-    if mission_id:
-        query = query.filter(db_models.EventRecord.mission_id == mission_id)
-
-    event_count = query.count()
-    last_event = query.order_by(db_models.EventRecord.timestamp.desc()).first()
-
-    if event_count >= 10:
-        status = "critical"
-        summary = "High volume of events in the selected window."
-    elif event_count >= 5:
-        status = "attention"
-        summary = "Elevated activity detected; review events."
-    else:
-        status = "stable"
-        summary = "Low activity; mission appears stable."
-
-    # Persist a snapshot for historical tracking
-    snapshot = db_models.AnalysisSnapshot(
-        mission_id=mission_id,
-        status=status,
-        summary=summary,
-        created_at=datetime.utcnow(),
-        event_count=event_count,
-        window_minutes=window_minutes,
+    engine = get_analysis_engine()
+    result: AnalysisResult = engine.analyze(
+        db, mission_id=mission_id, window_minutes=int(window_minutes)
     )
-    db.add(snapshot)
-    db.commit()
+
+    _persist_snapshot(db, result)
 
     logger.info(
         "Analysis status computed: mission=%s status=%s events=%s window=%s",
         mission_id,
-        status,
-        event_count,
-        window_minutes,
+        result.status,
+        result.event_count,
+        result.window_minutes,
     )
 
     return AnalysisStatusResponse(
-        mission_id=mission_id,
-        window_minutes=window_minutes,
-        event_count=event_count,
-        status=status,
-        last_event_at=last_event.timestamp if last_event else None,
-        summary=summary,
+        mission_id=result.mission_id,
+        window_minutes=result.window_minutes,
+        event_count=result.event_count,
+        status=result.status,
+        last_event_at=result.last_event_at,
+        summary=result.summary,
     )
+
+
+def _persist_snapshot(db: Session, result: AnalysisResult) -> None:
+    """Store the analysis snapshot for historical tracking."""
+
+    snapshot = db_models.AnalysisSnapshot(
+        mission_id=result.mission_id,
+        status=result.status,
+        summary=result.summary,
+        created_at=datetime.utcnow(),
+        event_count=result.event_count,
+        window_minutes=result.window_minutes,
+    )
+    db.add(snapshot)
+    db.commit()
