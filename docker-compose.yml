@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  sentinelai-backend:
+    build: .
+    image: sentinelai-backend:latest
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./app:/app/app
