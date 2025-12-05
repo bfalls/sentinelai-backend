@@ -142,7 +142,7 @@ At startup, `config.py` should load these (e.g. via `pydantic-settings` or `pyth
 
 With the virtualenv active:
 ```bash
-uvicorn sentinelai_backend.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Then open:
