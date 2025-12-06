@@ -1,16 +1,20 @@
-"""Rule-based analysis engine with a pluggable interface."""
+"""Rule-based and AI-assisted analysis engines with a stable interface."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+try:  # pragma: no cover - allow import when SQLAlchemy is unavailable
+    from sqlalchemy import func
+    from sqlalchemy.orm import Session
+except ImportError:  # pragma: no cover - handled in runtime checks
+    func = None
+    Session = Any  # type: ignore
 
-from app import db_models
+from app.services import openai_client
 
 logger = logging.getLogger("sentinelai.analysis_engine")
 
@@ -55,6 +59,10 @@ class RuleBasedAnalysisEngine:
     def analyze(
         self, db: Session, *, mission_id: Optional[str], window_minutes: int
     ) -> AnalysisResult:
+        if func is None:
+            raise RuntimeError("SQLAlchemy is required for rule-based analysis")
+        from app import db_models
+
         cutoff = datetime.utcnow() - timedelta(minutes=window_minutes)
         query = db.query(db_models.EventRecord).filter(
             db_models.EventRecord.timestamp >= cutoff
@@ -85,6 +93,8 @@ class RuleBasedAnalysisEngine:
     def _compute_dominant_event_type(
         self, db: Session, mission_id: Optional[str], cutoff: datetime
     ) -> Optional[str]:
+        from app import db_models
+
         type_counts = (
             db.query(
                 db_models.EventRecord.event_type, func.count().label("count")
@@ -125,3 +135,80 @@ def get_analysis_engine() -> AnalysisEngine:
     """
 
     return RuleBasedAnalysisEngine()
+
+
+@dataclass
+class MissionSignal:
+    """Structured mission signal to pass into the AI model."""
+
+    type: str
+    description: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    metadata: dict[str, Any] | None = None
+
+
+@dataclass
+class MissionContextPayload:
+    """Payload combining mission metadata and signals for AI analysis."""
+
+    mission_id: Optional[str]
+    mission_metadata: dict[str, Any] | None = None
+    signals: list[MissionSignal] | None = None
+    notes: str | None = None
+
+
+def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
+    """Construct a concise prompt for the AI model from structured context."""
+
+    lines: list[str] = ["You are assisting a mission analyst."]
+    if payload.mission_id:
+        lines.append(f"Mission ID: {payload.mission_id}")
+    if payload.mission_metadata:
+        lines.append("Mission metadata:")
+        for key, value in payload.mission_metadata.items():
+            lines.append(f"- {key}: {value}")
+
+    if payload.signals:
+        lines.append("Recent signals:")
+        for signal in payload.signals:
+            ts = signal.timestamp.isoformat() if signal.timestamp else "unspecified time"
+            lines.append(
+                f"- [{signal.type}] at {ts}: {signal.description or 'no description'}"
+            )
+            if signal.metadata:
+                for meta_key, meta_value in signal.metadata.items():
+                    lines.append(f"    * {meta_key}: {meta_value}")
+
+    if payload.notes:
+        lines.append(f"Notes: {payload.notes}")
+
+    lines.append(
+        "Provide a short mission status summary and any immediate risks based on these signals."
+    )
+    return "\n".join(lines)
+
+
+async def analyze_mission(
+    payload: MissionContextPayload, *, system_message: str | None = None
+) -> str:
+    """Analyze mission context using the AI client wrapper with safe fallbacks."""
+
+    prompt = _build_prompt_from_payload(payload)
+    try:
+        return await openai_client.analyze_mission_context(
+            prompt, system_message=system_message
+        )
+    except RuntimeError as exc:
+        logger.error("AI analysis failed: %s", exc)
+        return "AI analysis is currently unavailable. Please try again later."
+
+
+__all__ = [
+    "AnalysisEngine",
+    "AnalysisResult",
+    "RuleBasedAnalysisEngine",
+    "MissionSignal",
+    "MissionContextPayload",
+    "analyze_mission",
+    "get_analysis_engine",
+]

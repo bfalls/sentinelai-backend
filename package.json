@@ -5,9 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "api:dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
-    "api:test": "pytest -q",
+    "api:dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env.dev",
+    "api:test": "python -m pytest -q --color=yes",
+    "api:test:verbose": "python -m pytest -vv",
     "api:ping": "python -m scripts.ping_api",
+    "api:smoke": "python scripts/tests/run_analysis_smoke_test.py",
     "zip": "bash scripts/zip-src.sh",
     "service:start": "ssh $SENTINEL_EC2_HOST 'sudo systemctl start sentinelai-backend.service'",
     "service:stop": "ssh $SENTINEL_EC2_HOST 'sudo systemctl stop sentinelai-backend.service'"

@@ -1,19 +1,17 @@
-"""SentinelAI FastAPI application entrypoint."""
-
 from __future__ import annotations
 
 import logging
-import os
 import time
 
 from fastapi import FastAPI, Request
 
 from app.api import api_router
+from app.config import settings
 from app.db import init_db
 
-LOG_LEVEL = os.getenv("SENTINELAI_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(name)s - %(message)s"
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
 )
 logger = logging.getLogger("sentinelai")
 

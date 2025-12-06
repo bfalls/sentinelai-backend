@@ -105,13 +105,22 @@ cd sentinelai-backend
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies (adjust if using poetry/uv)
+# Install dependencies
 pip install -r requirements.txt
+# -- OR, if you're in development mode
+pip install -r requirements-dev.txt
 ```
 
 
 ## Configuration
-Configuration is driven by environment variables. A typical `.env`:
+Configuration is driven by environment variables.
+
+Key AI settings (add these to a local .env for dev):
+- OPENAI_API_KEY: API key for OpenAI (not committed to git).
+- OPENAI_MODEL: Model name (defaults to gpt-4o-mini).
+- DEBUG_AI_ENDPOINTS: Enable /debug/ai-test when true.
+
+A typical `.env`:
 
 ```env
 # General
@@ -124,7 +133,8 @@ SENTINELAI_PORT=8000
 
 # OpenAI / LLM
 OPENAI_API_KEY=sk-...
-SENTINELAI_MODEL_NAME=gpt-4.1-mini
+OPENAI_MODEL=gpt-4o-mini
+DEBUG_AI_ENDPOINTS=false
 
 # Sensor ingestion
 SENTINELAI_INGESTORS_ENABLED=aviation,weather
