@@ -14,6 +14,8 @@ from app.config import settings
 
 logger = logging.getLogger("sentinelai.openai")
 
+OPENAI_AVAILABLE = AsyncOpenAI is not None
+
 _client: AsyncOpenAI | None = None
 
 
@@ -35,6 +37,9 @@ def get_client() -> AsyncOpenAI:
 async def analyze_mission_context(prompt: str, *, system_message: str | None = None) -> str:
     """Send a mission analysis prompt to OpenAI and return the text response."""
 
+    if not OPENAI_AVAILABLE:
+        raise RuntimeError("OpenAI client library is not installed")
+    
     messages: list[dict[str, Any]] = []
     if system_message:
         messages.append({"role": "system", "content": system_message})
