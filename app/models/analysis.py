@@ -1,11 +1,13 @@
-"""Analysis-related response models."""
+"""Analysis-related request and response models."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from app.domain import DEFAULT_INTENT, MissionIntent
 
 
 class AnalysisStatusResponse(BaseModel):
@@ -23,3 +25,53 @@ class AnalysisStatusResponse(BaseModel):
         default=None, description="Timestamp of the most recent event in the window"
     )
     summary: str = Field(..., description="Short summary of how the status was derived")
+
+
+class MissionSignalModel(BaseModel):
+    """Signal describing a notable mission event or observation."""
+
+    type: str = Field(..., description="Signal category or type")
+    description: Optional[str] = Field(
+        default=None, description="Human-readable description of the signal"
+    )
+    timestamp: Optional[datetime] = Field(
+        default=None, description="Timestamp when the signal occurred"
+    )
+    metadata: Optional[dict[str, Any]] = Field(
+        default=None, description="Optional metadata for the signal"
+    )
+
+
+class MissionAnalysisRequest(BaseModel):
+    """Payload for AI-assisted mission analysis."""
+
+    mission_id: Optional[str] = Field(
+        default=None, description="Identifier for the mission"
+    )
+    mission_metadata: Optional[dict[str, Any]] = Field(
+        default=None, description="Metadata describing the mission"
+    )
+    signals: Optional[list[MissionSignalModel]] = Field(
+        default=None, description="List of mission signals to analyze"
+    )
+    notes: Optional[str] = Field(
+        default=None, description="Free-form mission notes or analyst guidance"
+    )
+    intent: MissionIntent = Field(
+        default=DEFAULT_INTENT,
+        description="Desired analysis intent that shapes AI behavior",
+    )
+
+
+class MissionAnalysisResponse(BaseModel):
+    """Structured response for AI-backed mission analysis."""
+
+    intent: MissionIntent = Field(..., description="Intent applied to the analysis")
+    summary: str = Field(..., description="Summary produced by the AI")
+    risks: list[str] = Field(
+        default_factory=list, description="List of risks highlighted by the AI"
+    )
+    recommendations: list[str] = Field(
+        default_factory=list, description="List of recommended actions"
+    )
+

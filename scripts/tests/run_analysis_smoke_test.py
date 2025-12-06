@@ -1,8 +1,18 @@
 #!/usr/bin/env python
+import importlib.util
 import json
 from datetime import datetime, timedelta, timezone
 
-import requests
+pytest = None
+if importlib.util.find_spec("pytest") is not None:  # pragma: no cover - optional dependency guard
+    import pytest
+
+if importlib.util.find_spec("requests") is None:  # pragma: no cover - handled for test collection
+    if pytest is not None:
+        pytest.skip("requests is required for smoke test", allow_module_level=True)
+    requests = None
+else:
+    import requests
 
 BASE_URL = "http://localhost:8000"
 MISSION_ID = "Grocery Store"
@@ -89,6 +99,9 @@ def get_analysis_status():
 
 
 def main():
+    if requests is None:  # pragma: no cover - runtime guard
+        raise RuntimeError("requests library required for smoke test")
+
     events = build_test_events()
     post_events(events)
     get_analysis_status()

@@ -11,6 +11,7 @@
     "api:ping": "python -m scripts.ping_api",
     "api:smoke": "python scripts/tests/run_analysis_smoke_test.py",
     "zip": "bash scripts/zip-src.sh",
+    "clean:zips": "scripts/clean-zips.sh",
     "service:start": "ssh $SENTINEL_EC2_HOST 'sudo systemctl start sentinelai-backend.service'",
     "service:stop": "ssh $SENTINEL_EC2_HOST 'sudo systemctl stop sentinelai-backend.service'"
   },

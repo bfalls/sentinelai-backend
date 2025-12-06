@@ -6,13 +6,26 @@ from datetime import datetime
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import db_models
+from app.domain import DEFAULT_INTENT
 from app.db import get_db
-from app.models.analysis import AnalysisStatusResponse
-from app.services import AnalysisResult, get_analysis_engine
+from app.models.analysis import (
+    AnalysisStatusResponse,
+    MissionAnalysisRequest,
+    MissionAnalysisResponse,
+)
+from app.services import (
+    AnalysisResult,
+    MissionAnalysisResult,
+    MissionContextPayload,
+    MissionIntent as MissionIntentType,
+    MissionSignal,
+    analyze_mission,
+    get_analysis_engine,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
@@ -57,6 +70,57 @@ async def get_analysis_status(
         status=result.status,
         last_event_at=result.last_event_at,
         summary=result.summary,
+    )
+
+
+@router.post(
+    "/analysis/mission",
+    response_model=MissionAnalysisResponse,
+    summary="Analyze mission context using AI with intent routing",
+)
+async def analyze_mission_context(
+    request: MissionAnalysisRequest,
+) -> MissionAnalysisResponse:
+    """Route mission analysis requests to the AI engine based on intent."""
+
+    payload = _to_context_payload(request)
+    intent: MissionIntentType = request.intent or DEFAULT_INTENT
+
+    try:
+        result: MissionAnalysisResult = await analyze_mission(
+            payload, intent=intent
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    return MissionAnalysisResponse(
+        intent=result.intent,
+        summary=result.summary,
+        risks=result.risks,
+        recommendations=result.recommendations,
+    )
+
+
+def _to_context_payload(request: MissionAnalysisRequest) -> MissionContextPayload:
+    signals = None
+    if request.signals:
+        signals = [
+            MissionSignal(
+                type=s.type,
+                description=s.description,
+                timestamp=s.timestamp,
+                metadata=s.metadata,
+            )
+            for s in request.signals
+        ]
+
+    return MissionContextPayload(
+        mission_id=request.mission_id,
+        mission_metadata=request.mission_metadata,
+        signals=signals,
+        notes=request.notes,
     )
 
 

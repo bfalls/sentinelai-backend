@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
-from typing import Any, Optional, Protocol
+from typing import Any, Awaitable, Callable, Optional, Protocol
 
 try:  # pragma: no cover - allow import when SQLAlchemy is unavailable
     from sqlalchemy import func
@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover - handled in runtime checks
     func = None
     Session = Any  # type: ignore
 
+from app.domain import DEFAULT_INTENT, MissionIntent
 from app.services import openai_client
 
 logger = logging.getLogger("sentinelai.analysis_engine")
@@ -188,12 +189,30 @@ def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
     return "\n".join(lines)
 
 
-async def analyze_mission(
-    payload: MissionContextPayload, *, system_message: str | None = None
-) -> str:
-    """Analyze mission context using the AI client wrapper with safe fallbacks."""
+@dataclass
+class MissionAnalysisResult:
+    """Structured AI analysis result."""
 
-    prompt = _build_prompt_from_payload(payload)
+    intent: MissionIntent
+    summary: str
+    risks: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
+
+
+MissionIntentHandler = Callable[
+    [MissionContextPayload, str | None], Awaitable[MissionAnalysisResult]
+]
+
+
+def _build_intent_prompt(
+    payload: MissionContextPayload, intent: MissionIntent, intent_lines: list[str]
+) -> str:
+    base_prompt = _build_prompt_from_payload(payload)
+    directive = "\n".join(intent_lines)
+    return "\n\n".join([base_prompt, f"Intent: {intent.value}", directive])
+
+
+async def _call_openai(prompt: str, system_message: str | None) -> str:
     try:
         return await openai_client.analyze_mission_context(
             prompt, system_message=system_message
@@ -203,12 +222,118 @@ async def analyze_mission(
         return "AI analysis is currently unavailable. Please try again later."
 
 
+async def _handle_situational_awareness(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.SITUATIONAL_AWARENESS,
+        [
+            "Provide a concise situational awareness summary.",
+            "List notable risks and recommended immediate actions.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.SITUATIONAL_AWARENESS,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
+
+async def _handle_route_risk_assessment(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.ROUTE_RISK_ASSESSMENT,
+        [
+            "Assess route and movement risks.",
+            "Call out chokepoints, threats along the path, and mitigations.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.ROUTE_RISK_ASSESSMENT,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
+
+async def _handle_weather_impact(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.WEATHER_IMPACT,
+        [
+            "Describe weather impacts on mission execution.",
+            "Highlight hazards, timing, and operational constraints.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.WEATHER_IMPACT,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
+
+async def _handle_airspace_deconfliction(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.AIRSPACE_DECONFLICTION,
+        [
+            "Provide an airspace deconfliction overview.",
+            "Identify conflicting flight activity and coordination needs.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.AIRSPACE_DECONFLICTION,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
+
+INTENT_HANDLERS: dict[MissionIntent, MissionIntentHandler] = {
+    MissionIntent.SITUATIONAL_AWARENESS: _handle_situational_awareness,
+    MissionIntent.ROUTE_RISK_ASSESSMENT: _handle_route_risk_assessment,
+    MissionIntent.WEATHER_IMPACT: _handle_weather_impact,
+    MissionIntent.AIRSPACE_DECONFLICTION: _handle_airspace_deconfliction,
+}
+
+
+async def analyze_mission(
+    payload: MissionContextPayload,
+    *,
+    system_message: str | None = None,
+    intent: MissionIntent = DEFAULT_INTENT,
+) -> MissionAnalysisResult:
+    """Analyze mission context using the AI client wrapper with intent routing."""
+
+    handler = INTENT_HANDLERS.get(intent)
+    if handler is None:
+        raise ValueError(f"Unsupported mission intent: {intent}")
+
+    return await handler(payload, system_message)
+
+
 __all__ = [
     "AnalysisEngine",
     "AnalysisResult",
     "RuleBasedAnalysisEngine",
     "MissionSignal",
     "MissionContextPayload",
+    "MissionAnalysisResult",
+    "MissionIntent",
+    "INTENT_HANDLERS",
     "analyze_mission",
     "get_analysis_engine",
 ]

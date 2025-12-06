@@ -34,6 +34,17 @@ Planned / in-scope for this backend:
   - Structured logging.
   - Config via environment variables for easy deployment on EC2 or containers.
 
+### Mission intents
+
+The AI analysis engine uses **mission intents** to route prompts and behaviors. Supported intents:
+
+- `SITUATIONAL_AWARENESS` (default)
+- `ROUTE_RISK_ASSESSMENT`
+- `WEATHER_IMPACT`
+- `AIRSPACE_DECONFLICTION`
+
+Requests can omit `intent` and will default to `SITUATIONAL_AWARENESS` for backward compatibility.
+
 ---
 
 ## Tech Stack

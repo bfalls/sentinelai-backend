@@ -3,3 +3,4 @@ pytest
 anyio
 trio
 requests
+httpx
