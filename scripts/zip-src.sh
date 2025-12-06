@@ -4,7 +4,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # zip-src.sh
 #
-# Creates a clean source zip for deployment, excluding:
+# Creates a timestamped source zip for deployment, excluding:
 # - virtualenvs
 # - git metadata
 # - python caches / build products
@@ -12,20 +12,17 @@ set -euo pipefail
 # - .env files + secrets
 # - editor/IDE clutter
 #
-# Usage:
-#   ./zip-src.sh
-#
 # Output:
 #   build/sentinel-backend-src-YYYYMMDD-HHMMSS.zip
 # ------------------------------------------------------------------------------
 
 PROJECT_NAME="sentinel-backend"
-OUTPUT_FILE="${PROJECT_NAME}.zip"
+TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+OUTPUT_FILE="${PROJECT_NAME}-src-${TIMESTAMP}.zip"
 
 echo "Creating source zip: $OUTPUT_FILE"
 echo
 
-# Exclusion list — tuned for Python + FastAPI + typical dev clutter.
 EXCLUDES=(
   # Python
   "*/__pycache__/*"
@@ -83,16 +80,13 @@ EXCLUDES=(
   "deploy/tmp/*"
 )
 
-# Build the exclusion options for zip
 ZIP_EXCLUDES=()
 for pattern in "${EXCLUDES[@]}"; do
   ZIP_EXCLUDES+=("-x" "$pattern")
 done
 
-# Create the zip
-rm -f "$OUTPUT_FILE"
 zip -r "$OUTPUT_FILE" . "${ZIP_EXCLUDES[@]}"
 
 echo
 echo "Done"
-echo "File created: $OUTPUT_FILE"
+echo "Created: $OUTPUT_FILE"

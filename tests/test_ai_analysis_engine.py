@@ -8,8 +8,13 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from app.domain import MissionIntent
 from app.services import analysis_engine
-from app.services.analysis_engine import MissionContextPayload, MissionSignal
+from app.services.analysis_engine import (
+    MissionAnalysisResult,
+    MissionContextPayload,
+    MissionSignal,
+)
 
 
 @pytest.mark.anyio
@@ -37,11 +42,18 @@ async def test_analyze_mission_calls_wrapper(monkeypatch):
         notes="Watch south approach",
     )
 
-    response = await analysis_engine.analyze_mission(payload, system_message="System guardrails")
+    response = await analysis_engine.analyze_mission(
+        payload,
+        system_message="System guardrails",
+        intent=MissionIntent.SITUATIONAL_AWARENESS,
+    )
 
-    assert response == "analysis-ok"
+    assert isinstance(response, MissionAnalysisResult)
+    assert response.summary == "analysis-ok"
+    assert response.intent == MissionIntent.SITUATIONAL_AWARENESS
     assert "mission-123" in captured["prompt"]
     assert "movement" in captured["prompt"]
+    assert "Intent: SITUATIONAL_AWARENESS" in captured["prompt"]
     assert captured["system_message"] == "System guardrails"
 
 
@@ -58,4 +70,41 @@ async def test_analyze_mission_handles_errors(monkeypatch, caplog):
         result = await analysis_engine.analyze_mission(payload)
 
     assert "AI analysis failed" in caplog.text
-    assert "unavailable" in result.lower()
+    assert isinstance(result, MissionAnalysisResult)
+    assert "unavailable" in result.summary.lower()
+
+
+@pytest.mark.anyio
+async def test_analyze_mission_routes_by_intent(monkeypatch):
+    prompts: dict[MissionIntent, str] = {}
+
+    async def fake_analyze(prompt: str, *, system_message: str | None = None) -> str:
+        for intent in MissionIntent:
+            if intent.value in prompt:
+                prompts[intent] = prompt
+        return "ok"
+
+    monkeypatch.setattr(
+        analysis_engine.openai_client, "analyze_mission_context", fake_analyze
+    )
+
+    payload = MissionContextPayload(
+        mission_id="mission-456", mission_metadata=None, signals=None, notes=None
+    )
+
+    for intent in MissionIntent:
+        result = await analysis_engine.analyze_mission(payload, intent=intent)
+        assert result.intent == intent
+        assert intent in prompts
+        assert intent.value in prompts[intent]
+
+
+@pytest.mark.anyio
+async def test_analyze_mission_rejects_unknown_intent():
+    payload = MissionContextPayload(mission_id=None, mission_metadata=None, signals=None, notes=None)
+
+    class FakeIntent:
+        value = "UNKNOWN"
+
+    with pytest.raises(ValueError):
+        await analysis_engine.analyze_mission(payload, intent=FakeIntent())
