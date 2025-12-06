@@ -103,7 +103,7 @@ You can adjust as the implementation evolves, but this gives Codex/LLMs a clear 
 ## Prerequisites
 
 - Python 3.11+
-- `pip` (or `uv` / `poetry` if you prefer)
+- `pip`
 - An OpenAI API key (or compatible LLM endpoint)
 
 ## Clone and install
@@ -150,6 +150,8 @@ DEBUG_AI_ENDPOINTS=false
 # Sensor ingestion
 SENTINELAI_INGESTORS_ENABLED=aviation,weather
 SENTINELAI_INGEST_INTERVAL_SECONDS=15
+
+ENABLE_WEATHER_INGESTOR=true
 
 # (Future) external feeds
 ADS_B_FEED_URL=
@@ -317,3 +319,13 @@ deploy/
   - Role-based behavior (different overlays or thresholds per unit type).
   - Metrics and tracing (e.g. Prometheus, OTEL, Honeycomb, etc.).
 
+
+## Weather ingestion
+
+Weather enrichment can be toggled with environment variables:
+
+- `ENABLE_WEATHER_INGESTOR`: Set to `true`/`1` to fetch weather context from Open-Meteo.
+- `WEATHER_BASE_URL`: Override the Open-Meteo endpoint if needed.
+- `WEATHER_TIMEOUT`: Timeout (seconds) for weather HTTP requests.
+
+When disabled or if the provider is unavailable, mission analysis continues without weather data.

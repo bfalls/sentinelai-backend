@@ -9,10 +9,12 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.domain import MissionIntent
+from app.models.weather import WeatherSnapshot
 from app.services import analysis_engine
 from app.services.analysis_engine import (
     MissionAnalysisResult,
     MissionContextPayload,
+    MissionLocationPayload,
     MissionSignal,
 )
 
@@ -108,3 +110,44 @@ async def test_analyze_mission_rejects_unknown_intent():
 
     with pytest.raises(ValueError):
         await analysis_engine.analyze_mission(payload, intent=FakeIntent())
+
+
+@pytest.mark.anyio
+async def test_prompt_includes_weather(monkeypatch):
+    captured_prompt: dict[str, str] = {}
+
+    async def fake_analyze(prompt: str, *, system_message: str | None = None) -> str:
+        captured_prompt["prompt"] = prompt
+        return "ok"
+
+    monkeypatch.setattr(analysis_engine.openai_client, "analyze_mission_context", fake_analyze)
+
+    weather = WeatherSnapshot(
+        latitude=10.0,
+        longitude=20.0,
+        as_of=datetime(2024, 1, 1, 0, 0, 0),
+        temperature_c=5.0,
+        wind_speed_mps=3.2,
+        wind_direction_deg=120,
+        precipitation_probability_pct=40,
+        precipitation_mm=1.2,
+        visibility_km=8.5,
+        cloud_cover_pct=80,
+        condition="rain",
+    )
+
+    payload = MissionContextPayload(
+        mission_id="mission-weather",
+        mission_metadata=None,
+        signals=None,
+        notes=None,
+        mission_location=MissionLocationPayload(latitude=10.0, longitude=20.0, description=None),
+        weather=weather,
+    )
+
+    result = await analysis_engine.analyze_mission(payload, intent=MissionIntent.WEATHER_IMPACT)
+
+    assert result.intent == MissionIntent.WEATHER_IMPACT
+    assert "Weather as of" in captured_prompt["prompt"]
+    assert "Temperature" in captured_prompt["prompt"]
+    assert "rain" in captured_prompt["prompt"]

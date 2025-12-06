@@ -8,6 +8,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.domain import DEFAULT_INTENT, MissionIntent
+from app.models.weather import TimeWindow
 
 
 class AnalysisStatusResponse(BaseModel):
@@ -19,7 +20,7 @@ class AnalysisStatusResponse(BaseModel):
     window_minutes: int = Field(..., description="Time window used for the analysis")
     event_count: int = Field(..., description="Number of events in the window")
     status: Literal["stable", "attention", "critical"] = Field(
-        ..., description="Rule-based mission status"
+        ..., description="Rule-based mission status",
     )
     last_event_at: Optional[datetime] = Field(
         default=None, description="Timestamp of the most recent event in the window"
@@ -42,6 +43,16 @@ class MissionSignalModel(BaseModel):
     )
 
 
+class MissionLocation(BaseModel):
+    """Represents a mission location for contextual data lookups."""
+
+    latitude: float = Field(..., description="Latitude in decimal degrees")
+    longitude: float = Field(..., description="Longitude in decimal degrees")
+    description: Optional[str] = Field(
+        default=None, description="Optional descriptor for the location",
+    )
+
+
 class MissionAnalysisRequest(BaseModel):
     """Payload for AI-assisted mission analysis."""
 
@@ -56,6 +67,12 @@ class MissionAnalysisRequest(BaseModel):
     )
     notes: Optional[str] = Field(
         default=None, description="Free-form mission notes or analyst guidance"
+    )
+    location: Optional[MissionLocation] = Field(
+        default=None, description="Mission coordinates for contextual lookups",
+    )
+    time_window: Optional[TimeWindow] = Field(
+        default=None, description="Time window for weather or temporal context",
     )
     intent: MissionIntent = Field(
         default=DEFAULT_INTENT,
@@ -75,3 +92,12 @@ class MissionAnalysisResponse(BaseModel):
         default_factory=list, description="List of recommended actions"
     )
 
+
+__all__ = [
+    "AnalysisStatusResponse",
+    "MissionAnalysisRequest",
+    "MissionAnalysisResponse",
+    "MissionSignalModel",
+    "MissionLocation",
+    "TimeWindow",
+]

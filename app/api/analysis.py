@@ -1,7 +1,3 @@
-"""Analysis endpoints for mission status."""
-
-from __future__ import annotations
-
 from datetime import datetime
 import logging
 from typing import Optional
@@ -20,10 +16,9 @@ from app.models.analysis import (
 from app.services import (
     AnalysisResult,
     MissionAnalysisResult,
-    MissionContextPayload,
     MissionIntent as MissionIntentType,
-    MissionSignal,
     analyze_mission,
+    build_context_payload,
     get_analysis_engine,
 )
 
@@ -83,7 +78,7 @@ async def analyze_mission_context(
 ) -> MissionAnalysisResponse:
     """Route mission analysis requests to the AI engine based on intent."""
 
-    payload = _to_context_payload(request)
+    payload = await build_context_payload(request)
     intent: MissionIntentType = request.intent or DEFAULT_INTENT
 
     try:
@@ -100,27 +95,6 @@ async def analyze_mission_context(
         summary=result.summary,
         risks=result.risks,
         recommendations=result.recommendations,
-    )
-
-
-def _to_context_payload(request: MissionAnalysisRequest) -> MissionContextPayload:
-    signals = None
-    if request.signals:
-        signals = [
-            MissionSignal(
-                type=s.type,
-                description=s.description,
-                timestamp=s.timestamp,
-                metadata=s.metadata,
-            )
-            for s in request.signals
-        ]
-
-    return MissionContextPayload(
-        mission_id=request.mission_id,
-        mission_metadata=request.mission_metadata,
-        signals=signals,
-        notes=request.notes,
     )
 
 

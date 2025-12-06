@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - handled in runtime checks
     Session = Any  # type: ignore
 
 from app.domain import DEFAULT_INTENT, MissionIntent
+from app.models.weather import TimeWindow, WeatherSnapshot
 from app.services import openai_client
 
 logger = logging.getLogger("sentinelai.analysis_engine")
@@ -149,6 +150,15 @@ class MissionSignal:
 
 
 @dataclass
+class MissionLocationPayload:
+    """Simple mission location container for prompt building."""
+
+    latitude: float
+    longitude: float
+    description: str | None = None
+
+
+@dataclass
 class MissionContextPayload:
     """Payload combining mission metadata and signals for AI analysis."""
 
@@ -156,6 +166,9 @@ class MissionContextPayload:
     mission_metadata: dict[str, Any] | None = None
     signals: list[MissionSignal] | None = None
     notes: str | None = None
+    mission_location: MissionLocationPayload | None = None
+    time_window: TimeWindow | None = None
+    weather: WeatherSnapshot | None = None
 
 
 def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
@@ -168,6 +181,38 @@ def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
         lines.append("Mission metadata:")
         for key, value in payload.mission_metadata.items():
             lines.append(f"- {key}: {value}")
+
+    if payload.mission_location:
+        loc = payload.mission_location
+        loc_line = f"Location: {loc.latitude:.4f}, {loc.longitude:.4f}"
+        if loc.description:
+            loc_line = f"{loc_line} ({loc.description})"
+        lines.append(loc_line)
+
+    if payload.weather:
+        weather = payload.weather
+        lines.append(
+            f"Weather as of {weather.as_of.isoformat()} UTC at {weather.latitude:.4f}, {weather.longitude:.4f}:"
+        )
+        if weather.temperature_c is not None:
+            lines.append(f"- Temperature: {weather.temperature_c} C")
+        if weather.wind_speed_mps is not None:
+            wind_desc = f"- Wind: {weather.wind_speed_mps} m/s"
+            if weather.wind_direction_deg is not None:
+                wind_desc = f"{wind_desc} @ {weather.wind_direction_deg} deg"
+            lines.append(wind_desc)
+        if weather.precipitation_probability_pct is not None:
+            lines.append(
+                f"- Precipitation probability: {weather.precipitation_probability_pct}%"
+            )
+        if weather.precipitation_mm is not None:
+            lines.append(f"- Precipitation: {weather.precipitation_mm} mm")
+        if weather.visibility_km is not None:
+            lines.append(f"- Visibility: {weather.visibility_km} km")
+        if weather.cloud_cover_pct is not None:
+            lines.append(f"- Cloud cover: {weather.cloud_cover_pct}%")
+        if weather.condition:
+            lines.append(f"- Condition code: {weather.condition}")
 
     if payload.signals:
         lines.append("Recent signals:")
@@ -330,6 +375,7 @@ __all__ = [
     "AnalysisResult",
     "RuleBasedAnalysisEngine",
     "MissionSignal",
+    "MissionLocationPayload",
     "MissionContextPayload",
     "MissionAnalysisResult",
     "MissionIntent",

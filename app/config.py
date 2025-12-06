@@ -23,6 +23,18 @@ class Settings:
         "yes",
     }
 
+    # Weather ingestion
+    enable_weather_ingestor: bool = os.getenv("ENABLE_WEATHER_INGESTOR", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    weather_provider: str = os.getenv("WEATHER_PROVIDER", "open-meteo")
+    weather_base_url: str = os.getenv(
+        "WEATHER_BASE_URL", "https://api.open-meteo.com/v1/forecast"
+    )
+    weather_timeout: float = float(os.getenv("WEATHER_TIMEOUT", "10.0"))
+
 
 settings = Settings()
 
