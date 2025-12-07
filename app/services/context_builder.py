@@ -1,4 +1,4 @@
-"""Build mission context payloads with optional weather enrichment."""
+"""Build mission context payloads with optional weather and air traffic enrichment."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ import logging
 from typing import Optional
 
 from app.config import settings
-from app.ingestors import WeatherIngestor
+from app.ingestors import ADSBIngestor, WeatherIngestor
+from app.models.air_traffic import AircraftTrack
 from app.models.analysis import MissionAnalysisRequest, MissionSignalModel
 from app.models.weather import WeatherSnapshot
 from app.services.analysis_engine import (
@@ -21,14 +22,20 @@ logger = logging.getLogger("sentinelai.context_builder")
 class ContextBuilder:
     """Orchestrates enrichment of mission context for analysis."""
 
-    def __init__(self, weather_ingestor: Optional[WeatherIngestor] = None) -> None:
+    def __init__(
+        self,
+        weather_ingestor: Optional[WeatherIngestor] = None,
+        adsb_ingestor: Optional[ADSBIngestor] = None,
+    ) -> None:
         self.weather_ingestor = weather_ingestor or WeatherIngestor()
+        self.adsb_ingestor = adsb_ingestor or ADSBIngestor()
 
     async def build_context_payload(
         self, request: MissionAnalysisRequest
     ) -> MissionContextPayload:
         mission_location = None
         weather_snapshot: WeatherSnapshot | None = None
+        air_traffic: list[AircraftTrack] | None = None
 
         if request.location:
             mission_location = MissionLocationPayload(
@@ -47,6 +54,16 @@ class ContextBuilder:
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("Weather ingestion unavailable: %s", exc)
 
+        if settings.enable_adsb_ingestor and request.location:
+            try:
+                air_traffic = await self.adsb_ingestor.get_air_traffic(
+                    request.location.latitude,
+                    request.location.longitude,
+                    radius_nm=None,
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning("ADSB ingestion unavailable: %s", exc)
+
         return MissionContextPayload(
             mission_id=request.mission_id,
             mission_metadata=request.mission_metadata,
@@ -55,6 +72,7 @@ class ContextBuilder:
             mission_location=mission_location,
             time_window=request.time_window,
             weather=weather_snapshot,
+            air_traffic=air_traffic,
         )
 
 

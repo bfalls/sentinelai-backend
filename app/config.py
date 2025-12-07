@@ -35,6 +35,19 @@ class Settings:
     )
     weather_timeout: float = float(os.getenv("WEATHER_TIMEOUT", "10.0"))
 
+    # ADS-B ingestion
+    enable_adsb_ingestor: bool = os.getenv("ENABLE_ADSB_INGESTOR", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    adsb_base_url: str = os.getenv(
+        "ADSB_BASE_URL",
+        "https://opensky-network.org/api/states/all",
+    )
+    adsb_timeout: float = float(os.getenv("ADSB_TIMEOUT", "10.0"))
+    adsb_default_radius_nm: float = float(os.getenv("ADSB_DEFAULT_RADIUS_NM", "25.0"))
+
 
 settings = Settings()
 

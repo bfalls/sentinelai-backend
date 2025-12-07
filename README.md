@@ -152,12 +152,13 @@ SENTINELAI_INGESTORS_ENABLED=aviation,weather
 SENTINELAI_INGEST_INTERVAL_SECONDS=15
 
 ENABLE_WEATHER_INGESTOR=true
-
-# (Future) external feeds
-ADS_B_FEED_URL=
-WEATHER_API_URL=
-WEATHER_API_KEY=
+ENABLE_ADSB_INGESTOR=false
+ADSB_BASE_URL=https://opensky-network.org/api/states/all
+ADSB_DEFAULT_RADIUS_NM=25
+ADSB_TIMEOUT=10
 ```
+
+Enable ADS-B ingestion by setting `ENABLE_ADSB_INGESTOR=true`. The default endpoint uses the unauthenticated OpenSky REST feed and does not require any credentials.
 
 At startup, `config.py` should load these (e.g. via `pydantic-settings` or `python-dotenv`).
 

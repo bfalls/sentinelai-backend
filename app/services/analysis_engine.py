@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
+import math
 from typing import Any, Awaitable, Callable, Optional, Protocol
 
 try:  # pragma: no cover - allow import when SQLAlchemy is unavailable
@@ -15,6 +16,7 @@ except ImportError:  # pragma: no cover - handled in runtime checks
     Session = Any  # type: ignore
 
 from app.domain import DEFAULT_INTENT, MissionIntent
+from app.models.air_traffic import AircraftTrack
 from app.models.weather import TimeWindow, WeatherSnapshot
 from app.services import openai_client
 
@@ -169,6 +171,7 @@ class MissionContextPayload:
     mission_location: MissionLocationPayload | None = None
     time_window: TimeWindow | None = None
     weather: WeatherSnapshot | None = None
+    air_traffic: list[AircraftTrack] | None = None
 
 
 def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
@@ -225,6 +228,11 @@ def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
                 for meta_key, meta_value in signal.metadata.items():
                     lines.append(f"    * {meta_key}: {meta_value}")
 
+    air_traffic_lines = _summarize_air_traffic(payload)
+    if air_traffic_lines:
+        lines.append("Nearby air traffic:")
+        lines.extend(air_traffic_lines)
+
     if payload.notes:
         lines.append(f"Notes: {payload.notes}")
 
@@ -232,6 +240,78 @@ def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
         "Provide a short mission status summary and any immediate risks based on these signals."
     )
     return "\n".join(lines)
+
+
+def _haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Compute distance between two coordinates in nautical miles."""
+
+    r_km = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(
+        d_lambda / 2
+    ) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    distance_km = r_km * c
+    return distance_km * 0.539957
+
+
+def _summarize_air_traffic(payload: MissionContextPayload) -> list[str] | None:
+    tracks = payload.air_traffic or []
+    if not tracks:
+        return None
+
+    lines: list[str] = []
+    loc = payload.mission_location
+    distances: list[tuple[AircraftTrack, float | None]] = []
+    for track in tracks:
+        if loc:
+            dist_nm = _haversine_nm(loc.latitude, loc.longitude, track.lat, track.lon)
+        else:
+            dist_nm = None
+        distances.append((track, dist_nm))
+
+    bands = {"<=5k": 0, "5-10k": 0, "10-20k": 0, ">20k": 0}
+    for track, _ in distances:
+        if track.altitude is None:
+            continue
+        if track.altitude <= 5000:
+            bands["<=5k"] += 1
+        elif track.altitude <= 10000:
+            bands["5-10k"] += 1
+        elif track.altitude <= 20000:
+            bands["10-20k"] += 1
+        else:
+            bands[">20k"] += 1
+
+    if any(bands.values()):
+        lines.append(
+            "Altitude bands (ft): "
+            f"<=5k:{bands['<=5k']}; 5-10k:{bands['5-10k']}; "
+            f"10-20k:{bands['10-20k']}; >20k:{bands['>20k']}"
+        )
+
+    nearest: list[tuple[AircraftTrack, float | None]]
+    if loc:
+        nearest = sorted(distances, key=lambda t: t[1] if t[1] is not None else math.inf)[
+            :3
+        ]
+    else:
+        nearest = distances[:3]
+
+    for track, dist_nm in nearest:
+        ident = track.callsign or track.icao or "unknown"
+        alt_desc = f"{int(track.altitude)} ft" if track.altitude is not None else "alt unknown"
+        speed_desc = f", {track.ground_speed} kt" if track.ground_speed is not None else ""
+        heading_desc = f", hdg {track.heading}" if track.heading is not None else ""
+        distance_desc = (
+            f", {dist_nm:.1f} nm from mission" if dist_nm is not None else ""
+        )
+        lines.append(f"- {ident}: {alt_desc}{speed_desc}{heading_desc}{distance_desc}")
+
+    return lines
 
 
 @dataclass
