@@ -56,6 +56,7 @@ EXCLUDES=(
   "*.log"
   "*.tmp"
   "*.bak"
+  "*.db"
 
   # Secrets
   ".env"

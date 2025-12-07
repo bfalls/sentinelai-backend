@@ -2,7 +2,9 @@ from datetime import datetime
 
 import pytest
 
+from app import db_models
 from app.config import settings
+from app.db import SessionLocal, init_db
 from app.models.air_traffic import AircraftTrack
 from app.models.analysis import MissionAnalysisRequest, MissionLocation, MissionSignalModel
 from app.models.weather import WeatherSnapshot
@@ -178,3 +180,84 @@ async def test_context_builder_skips_adsb_when_disabled(monkeypatch):
 
     assert payload.air_traffic is None
     assert adsb_ingestor.call_count == 0
+
+
+@pytest.mark.anyio
+async def test_context_builder_loads_aprs_events(monkeypatch):
+    monkeypatch.setattr(settings, "enable_weather_ingestor", False)
+    monkeypatch.setattr(settings, "enable_adsb_ingestor", False)
+    monkeypatch.setattr(settings, "aprs_enabled", True)
+    init_db()
+    session = SessionLocal()
+    try:
+        event = db_models.EventRecord(
+            id="aprs1",
+            event_type="aprs",
+            mission_id="m1",
+            description="APRS message",
+            source="TEST",
+            timestamp=datetime.utcnow(),
+            event_metadata={
+                "source_callsign": "TEST",
+                "lat": 1.0,
+                "lon": 2.0,
+                "text": "hello",
+            },
+        )
+        session.add(event)
+        session.commit()
+
+        builder = ContextBuilder(
+            weather_ingestor=FakeWeatherIngestor(), adsb_ingestor=FakeADSBIngestor()
+        )
+        request = MissionAnalysisRequest(
+            mission_id="m1",
+            signals=None,
+            location=MissionLocation(latitude=1.0, longitude=2.0),
+        )
+
+        payload = await builder.build_context_payload(request, db=session)
+    finally:
+        session.query(db_models.EventRecord).delete()
+        session.commit()
+        session.close()
+
+    assert payload.aprs_messages is not None
+    assert len(payload.aprs_messages) == 1
+    assert payload.aprs_messages[0].source == "TEST"
+
+
+@pytest.mark.anyio
+async def test_context_builder_skips_aprs_when_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "aprs_enabled", False)
+    init_db()
+    session = SessionLocal()
+    try:
+        event = db_models.EventRecord(
+            id="aprs2",
+            event_type="aprs",
+            mission_id="m1",
+            description="APRS message",
+            source="TEST",
+            timestamp=datetime.utcnow(),
+            event_metadata={"source_callsign": "TEST", "text": "hello"},
+        )
+        session.add(event)
+        session.commit()
+
+        builder = ContextBuilder(
+            weather_ingestor=FakeWeatherIngestor(), adsb_ingestor=FakeADSBIngestor()
+        )
+        request = MissionAnalysisRequest(
+            mission_id="m1",
+            signals=None,
+            location=MissionLocation(latitude=1.0, longitude=2.0),
+        )
+
+        payload = await builder.build_context_payload(request, db=session)
+    finally:
+        session.query(db_models.EventRecord).delete()
+        session.commit()
+        session.close()
+
+    assert payload.aprs_messages is None

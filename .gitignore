@@ -102,3 +102,4 @@ htmlcov/
 *.orig
 *.zip
 *.db
+*.pem

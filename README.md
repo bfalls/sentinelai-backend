@@ -160,6 +160,34 @@ ADSB_TIMEOUT=10
 
 Enable ADS-B ingestion by setting `ENABLE_ADSB_INGESTOR=true`. The default endpoint uses the unauthenticated OpenSky REST feed and does not require any credentials.
 
+### APRS-IS ingestion
+
+APRS is supported via a background TCP connection to an APRS-IS server that continuously posts packets into the `/api/v1/events` pipeline. Configure it with environment variables:
+
+- `APRS_ENABLED` (true/false)
+- `APRS_HOST` / `APRS_PORT` (defaults: `rotate.aprs2.net` / `14580`)
+- `APRS_CALLSIGN` and `APRS_PASSCODE` (required when enabled; sourced from the environment only)
+- `APRS_FILTER` (optional raw filter string) **or** `APRS_FILTER_CENTER_LAT`, `APRS_FILTER_CENTER_LON`, `APRS_FILTER_RADIUS_KM` for a simple range filter
+- `API_BASE_URL` (base URL used by background ingestors to post events; defaults to `http://localhost:8000`)
+
+When enabled, the APRS ingestor runs inside the FastAPI app process. It will log connection issues and back off, but it will not block the API from serving requests. Missions and analysis endpoints read APRS-derived events from the database; no live APRS calls are made while handling a request.
+
+Local development example:
+
+1. Export APRS credentials and filter (example radius filter around a test area):
+
+   ```bash
+   export APRS_ENABLED=true
+   export APRS_CALLSIGN=N0CALL
+   export APRS_PASSCODE=12345
+   export APRS_FILTER_CENTER_LAT=40.0
+   export APRS_FILTER_CENTER_LON=-105.0
+   export APRS_FILTER_RADIUS_KM=50
+   ```
+
+2. Start the API: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+3. Watch logs for incoming APRS packets; new events will appear in `/api/v1/events` responses and be included automatically when calling `/api/v1/analysis/mission`.
+
 At startup, `config.py` should load these (e.g. via `pydantic-settings` or `python-dotenv`).
 
 ## Running the Server Locally

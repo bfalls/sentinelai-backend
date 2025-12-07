@@ -9,6 +9,7 @@
     "api-test": "python -m pytest -q --color=yes",
     "api-test-verbose": "python -m pytest -vv",
     "api-test-ingestors": "python -m scripts.tests.run_ingestors_live_test",
+    "api-test-aprs-live": "python -m scripts.tests.run_aprs_live_test",
     "api-ping": "python -m scripts.ping_api",
     "api-smoke": "python scripts/tests/run_analysis_smoke_test.py",
     "api-reset-smoke": "python scripts/tests/reset_smoke_test_data.py",

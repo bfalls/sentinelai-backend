@@ -74,11 +74,11 @@ async def get_analysis_status(
     summary="Analyze mission context using AI with intent routing",
 )
 async def analyze_mission_context(
-    request: MissionAnalysisRequest,
+    request: MissionAnalysisRequest, db: Session = Depends(get_db)
 ) -> MissionAnalysisResponse:
     """Route mission analysis requests to the AI engine based on intent."""
 
-    payload = await build_context_payload(request)
+    payload = await build_context_payload(request, db=db)
     intent: MissionIntentType = request.intent or DEFAULT_INTENT
 
     try:
