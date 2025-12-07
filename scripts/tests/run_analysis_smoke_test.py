@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# Run this with `npm run api-smoke`
+# Note this is only intented to run against a local dev server, not prod.
 import importlib.util
 import json
 from datetime import datetime, timedelta, timezone
@@ -15,8 +17,43 @@ else:
     import requests
 
 BASE_URL = "http://localhost:8000"
-MISSION_ID = "Grocery Store"
+MISSION_ID = "Smoke Test Mission"
+SOURCE = "smoke-test"
 
+def require_requests():
+    """
+    Return the requests module or raise if it's unavailable.
+
+    This function gives Pylance a non-optional object to work with so
+    calls like .get() / .post() don't trigger Optional member warnings.
+    """
+    if requests is None:  # pragma: no cover - runtime guard
+        raise RuntimeError("requests library required for smoke test")
+    return requests
+
+def check_server_health() -> None:
+    """Ensure the API server is up before running the smoke test."""
+    req = require_requests()
+    
+    url = f"{BASE_URL}/healthz"
+    print(f"Checking API health at {url} ...")
+    try:
+        resp = req.get(url, timeout=5)
+    except Exception as exc:
+        raise SystemExit(f"ERROR: The server is probably not running. Failed to reach {url}: {exc}")
+
+    if resp.status_code != 200:
+        raise SystemExit(f"ERROR: {url} returned {resp.status_code}: {resp.text}")
+
+    try:
+        payload = resp.json()
+    except Exception:
+        payload = {}
+
+    if not isinstance(payload, dict) or payload.get("status") != "ok" or payload.get("env", "unknown") in ("prod",):
+        raise SystemExit(f"ERROR: unexpected /healthz payload: {payload}")
+
+    print("Health check OK.\n")
 
 def build_test_events():
     """
@@ -58,7 +95,7 @@ def build_test_events():
             "event_type": types[i],
             "description": descriptions[i],
             "mission_id": MISSION_ID,
-            "source": "smoke-test",
+            "source": SOURCE,
             "timestamp": ts.isoformat(),
             "event_metadata": {
                 "index": i,
@@ -66,15 +103,47 @@ def build_test_events():
             },
         }
         events.append(event)
+        
+    # Add a couple of synthetic air traffic events so the database contains
+    # examples of flight-related activity for this mission.
+    flight_events = [
+        {
+            "event_type": "air_traffic",
+            "description": "Small aircraft orbiting near mission area",
+            "mission_id": MISSION_ID,
+            "source": SOURCE,
+            "timestamp": now.isoformat(),
+            "event_metadata": {
+                "callsign": "N945MC",
+                "icao": "AD20D1",
+                "altitude_ft": 4500,
+                "ground_speed_kt": 120,
+            },
+        },
+        {
+            "event_type": "air_traffic",
+            "description": "Regional flight passing overhead",
+            "mission_id": MISSION_ID,
+            "source": SOURCE,
+            "timestamp": (now - timedelta(minutes=2)).isoformat(),
+            "event_metadata": {
+                "callsign": "QXE2032",
+                "altitude_ft": 12000,
+                "ground_speed_kt": 320,
+            },
+        },
+    ]
+    events.extend(flight_events)
 
     return events
 
 
 def post_events(events):
+    req = require_requests()
     print(f"Posting {len(events)} events to {BASE_URL}/api/v1/events ...")
     ids = []
     for e in events:
-        resp = requests.post(f"{BASE_URL}/api/v1/events", json=e)
+        resp = req.post(f"{BASE_URL}/api/v1/events", json=e)
         try:
             data = resp.json()
         except Exception:
@@ -86,8 +155,9 @@ def post_events(events):
 
 
 def get_analysis_status():
+    req = require_requests()
     params = {"mission_id": MISSION_ID, "window_minutes": 60}
-    resp = requests.get(f"{BASE_URL}/api/v1/analysis/status", params=params)
+    resp = req.get(f"{BASE_URL}/api/v1/analysis/status", params=params)
     try:
         data = resp.json()
     except Exception:
@@ -99,9 +169,9 @@ def get_analysis_status():
 
 
 def main():
-    if requests is None:  # pragma: no cover - runtime guard
-        raise RuntimeError("requests library required for smoke test")
+    _ = require_requests()
 
+    check_server_health()
     events = build_test_events()
     post_events(events)
     get_analysis_status()

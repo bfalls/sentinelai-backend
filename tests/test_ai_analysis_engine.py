@@ -9,6 +9,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.domain import MissionIntent
+from app.models.air_traffic import AircraftTrack
 from app.models.weather import WeatherSnapshot
 from app.services import analysis_engine
 from app.services.analysis_engine import (
@@ -151,3 +152,76 @@ async def test_prompt_includes_weather(monkeypatch):
     assert "Weather as of" in captured_prompt["prompt"]
     assert "Temperature" in captured_prompt["prompt"]
     assert "rain" in captured_prompt["prompt"]
+
+
+@pytest.mark.anyio
+async def test_prompt_includes_air_traffic(monkeypatch):
+    captured_prompt: dict[str, str] = {}
+
+    async def fake_analyze(prompt: str, *, system_message: str | None = None) -> str:
+        captured_prompt["prompt"] = prompt
+        return "ok"
+
+    monkeypatch.setattr(analysis_engine.openai_client, "analyze_mission_context", fake_analyze)
+
+    tracks = [
+        AircraftTrack(
+            callsign="AIR1",
+            icao="ABC",
+            lat=10.1,
+            lon=20.1,
+            altitude=8000,
+            ground_speed=250,
+            heading=90,
+        ),
+        AircraftTrack(
+            callsign="AIR2",
+            icao="DEF",
+            lat=10.2,
+            lon=20.2,
+            altitude=15000,
+            ground_speed=300,
+            heading=180,
+        ),
+    ]
+
+    payload = MissionContextPayload(
+        mission_id="mission-air",
+        mission_metadata=None,
+        signals=None,
+        notes=None,
+        mission_location=MissionLocationPayload(latitude=10.0, longitude=20.0, description=None),
+        air_traffic=tracks,
+    )
+
+    result = await analysis_engine.analyze_mission(payload, intent=MissionIntent.AIRSPACE_DECONFLICTION)
+
+    assert result.intent == MissionIntent.AIRSPACE_DECONFLICTION
+    assert "Nearby air traffic" in captured_prompt["prompt"]
+    assert "AIR1" in captured_prompt["prompt"]
+    assert "Altitude bands" in captured_prompt["prompt"]
+
+
+@pytest.mark.anyio
+async def test_prompt_skips_air_traffic_when_absent(monkeypatch):
+    captured_prompt: dict[str, str] = {}
+
+    async def fake_analyze(prompt: str, *, system_message: str | None = None) -> str:
+        captured_prompt["prompt"] = prompt
+        return "ok"
+
+    monkeypatch.setattr(analysis_engine.openai_client, "analyze_mission_context", fake_analyze)
+
+    payload = MissionContextPayload(
+        mission_id="mission-air",
+        mission_metadata=None,
+        signals=None,
+        notes=None,
+        mission_location=MissionLocationPayload(latitude=10.0, longitude=20.0, description=None),
+        air_traffic=None,
+    )
+
+    result = await analysis_engine.analyze_mission(payload, intent=MissionIntent.AIRSPACE_DECONFLICTION)
+
+    assert result.intent == MissionIntent.AIRSPACE_DECONFLICTION
+    assert "Nearby air traffic" not in captured_prompt["prompt"]
