@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - handled in runtime checks
     Session = Any  # type: ignore
 
 from app.domain import DEFAULT_INTENT, MissionIntent
+from app.ingestors import AprsMessage
 from app.models.air_traffic import AircraftTrack
 from app.models.weather import TimeWindow, WeatherSnapshot
 from app.services import openai_client
@@ -172,6 +173,7 @@ class MissionContextPayload:
     time_window: TimeWindow | None = None
     weather: WeatherSnapshot | None = None
     air_traffic: list[AircraftTrack] | None = None
+    aprs_messages: list[AprsMessage] | None = None
 
 
 def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
@@ -232,6 +234,11 @@ def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
     if air_traffic_lines:
         lines.append("Nearby air traffic:")
         lines.extend(air_traffic_lines)
+
+    aprs_lines = _summarize_aprs(payload)
+    if aprs_lines:
+        lines.append("Recent APRS radio traffic:")
+        lines.extend(aprs_lines)
 
     if payload.notes:
         lines.append(f"Notes: {payload.notes}")
@@ -310,6 +317,31 @@ def _summarize_air_traffic(payload: MissionContextPayload) -> list[str] | None:
             f", {dist_nm:.1f} nm from mission" if dist_nm is not None else ""
         )
         lines.append(f"- {ident}: {alt_desc}{speed_desc}{heading_desc}{distance_desc}")
+
+    return lines
+
+
+def _summarize_aprs(payload: MissionContextPayload) -> list[str] | None:
+    messages = payload.aprs_messages or []
+    if not messages:
+        return None
+
+    lines: list[str] = []
+    for message in messages[:5]:
+        time_desc = message.timestamp.isoformat()
+        route = f"{message.source}->{message.destination}" if message.destination else message.source
+        location_desc = (
+            f" at {message.lat:.4f},{message.lon:.4f}"
+            if message.lat is not None and message.lon is not None
+            else ""
+        )
+        altitude_desc = (
+            f" alt {int(message.altitude_m)} m" if message.altitude_m is not None else ""
+        )
+        text_desc = message.text or ""
+        lines.append(
+            f"- {route}{location_desc}{altitude_desc} at {time_desc}: {text_desc}".strip()
+        )
 
     return lines
 

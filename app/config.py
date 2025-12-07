@@ -48,6 +48,35 @@ class Settings:
     adsb_timeout: float = float(os.getenv("ADSB_TIMEOUT", "10.0"))
     adsb_default_radius_nm: float = float(os.getenv("ADSB_DEFAULT_RADIUS_NM", "25.0"))
 
+    # APRS ingestion
+    aprs_enabled: bool = os.getenv("APRS_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    aprs_host: str = os.getenv("APRS_HOST", "noam.aprs2.net")
+    aprs_port: int = int(os.getenv("APRS_PORT", "14580"))
+    aprs_callsign: str | None = os.getenv("APRS_CALLSIGN")
+    aprs_passcode: str | None = os.getenv("APRS_PASSCODE")
+    aprs_filter_center_lat: float | None = (
+        float(os.getenv("APRS_FILTER_CENTER_LAT"))
+        if os.getenv("APRS_FILTER_CENTER_LAT")
+        else None
+    )
+    aprs_filter_center_lon: float | None = (
+        float(os.getenv("APRS_FILTER_CENTER_LON"))
+        if os.getenv("APRS_FILTER_CENTER_LON")
+        else None
+    )
+    aprs_filter_radius_km: float | None = (
+        float(os.getenv("APRS_FILTER_RADIUS_KM"))
+        if os.getenv("APRS_FILTER_RADIUS_KM")
+        else None
+    )
+    aprs_filter: str | None = os.getenv("APRS_FILTER")
+
+    api_base_url: str = os.getenv("API_BASE_URL", "http://localhost:8000")
+
 
 settings = Settings()
 

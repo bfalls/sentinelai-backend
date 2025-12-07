@@ -1,12 +1,16 @@
-"""Build mission context payloads with optional weather and air traffic enrichment."""
+"""Build mission context payloads with optional weather, air traffic, and APRS data."""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import logging
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
+from app import db_models
 from app.config import settings
-from app.ingestors import ADSBIngestor, WeatherIngestor
+from app.ingestors import ADSBIngestor, AprsMessage, WeatherIngestor
 from app.models.air_traffic import AircraftTrack
 from app.models.analysis import MissionAnalysisRequest, MissionSignalModel
 from app.models.weather import WeatherSnapshot
@@ -31,11 +35,12 @@ class ContextBuilder:
         self.adsb_ingestor = adsb_ingestor or ADSBIngestor()
 
     async def build_context_payload(
-        self, request: MissionAnalysisRequest
+        self, request: MissionAnalysisRequest, db: Session | None = None
     ) -> MissionContextPayload:
         mission_location = None
         weather_snapshot: WeatherSnapshot | None = None
         air_traffic: list[AircraftTrack] | None = None
+        aprs_messages: list[AprsMessage] | None = None
 
         if request.location:
             mission_location = MissionLocationPayload(
@@ -64,6 +69,11 @@ class ContextBuilder:
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("ADSB ingestion unavailable: %s", exc)
 
+        if settings.aprs_enabled and db is not None:
+            aprs_messages = self._load_aprs_messages(
+                db, request.mission_id, request.time_window
+            )
+
         return MissionContextPayload(
             mission_id=request.mission_id,
             mission_metadata=request.mission_metadata,
@@ -73,7 +83,52 @@ class ContextBuilder:
             time_window=request.time_window,
             weather=weather_snapshot,
             air_traffic=air_traffic,
+            aprs_messages=aprs_messages,
         )
+
+    def _load_aprs_messages(
+        self,
+        db: Session,
+        mission_id: str | None,
+        time_window,
+    ) -> list[AprsMessage] | None:
+        cutoff_start: datetime | None = None
+        cutoff_end: datetime | None = None
+        if time_window:
+            cutoff_start = time_window.start
+            cutoff_end = time_window.end
+        if cutoff_start is None:
+            cutoff_start = datetime.utcnow() - timedelta(hours=1)
+
+        query = db.query(db_models.EventRecord).filter(
+            db_models.EventRecord.event_type == "aprs",
+            db_models.EventRecord.timestamp >= cutoff_start,
+        )
+        if cutoff_end is not None:
+            query = query.filter(db_models.EventRecord.timestamp <= cutoff_end)
+        if mission_id:
+            query = query.filter(db_models.EventRecord.mission_id == mission_id)
+
+        records = query.order_by(db_models.EventRecord.timestamp.desc()).limit(100).all()
+        if not records:
+            return None
+
+        messages: list[AprsMessage] = []
+        for record in records:
+            metadata = record.event_metadata or {}
+            messages.append(
+                AprsMessage(
+                    source=metadata.get("source_callsign") or record.source or "unknown",
+                    destination=metadata.get("dest_callsign"),
+                    lat=metadata.get("lat"),
+                    lon=metadata.get("lon"),
+                    altitude_m=metadata.get("altitude_m"),
+                    text=metadata.get("text") or record.description,
+                    timestamp=record.timestamp,
+                    raw_packet=metadata.get("raw_packet"),
+                )
+            )
+        return messages
 
 
 def _convert_signals(signals: list[MissionSignalModel] | None):
@@ -93,10 +148,12 @@ def _convert_signals(signals: list[MissionSignalModel] | None):
 _default_builder = ContextBuilder()
 
 
-async def build_context_payload(request: MissionAnalysisRequest) -> MissionContextPayload:
+async def build_context_payload(
+    request: MissionAnalysisRequest, db: Session | None = None
+) -> MissionContextPayload:
     """Convenience wrapper using the default context builder."""
 
-    return await _default_builder.build_context_payload(request)
+    return await _default_builder.build_context_payload(request, db=db)
 
 
 __all__ = ["ContextBuilder", "build_context_payload"]

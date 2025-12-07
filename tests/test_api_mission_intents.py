@@ -30,7 +30,7 @@ async def test_mission_analysis_defaults_intent(monkeypatch):
     monkeypatch.setattr(analysis_module, "analyze_mission", fake_analyze)
 
     request = MissionAnalysisRequest(mission_id="abc")
-    response = await analysis_module.analyze_mission_context(request)
+    response = await analysis_module.analyze_mission_context(request, db=None)
 
     assert response.intent == DEFAULT_INTENT
     assert captured["intent"] == DEFAULT_INTENT
@@ -47,7 +47,7 @@ async def test_mission_analysis_respects_intent(monkeypatch):
     monkeypatch.setattr(analysis_module, "analyze_mission", fake_analyze)
 
     request = MissionAnalysisRequest(mission_id="abc", intent=MissionIntent.ROUTE_RISK_ASSESSMENT)
-    response = await analysis_module.analyze_mission_context(request)
+    response = await analysis_module.analyze_mission_context(request, db=None)
 
     assert response.intent == MissionIntent.ROUTE_RISK_ASSESSMENT
     assert captured["intent"] == MissionIntent.ROUTE_RISK_ASSESSMENT
@@ -64,6 +64,6 @@ async def test_mission_analysis_rejects_unknown_intent(monkeypatch):
     monkeypatch.setattr(analysis_module, "analyze_mission", fake_analyze)
 
     with pytest.raises(Exception) as exc_info:
-        await analysis_module.analyze_mission_context(request)
+        await analysis_module.analyze_mission_context(request, db=None)
 
     assert "Unsupported mission intent" in str(exc_info.value)

@@ -134,6 +134,44 @@ def build_test_events():
         },
     ]
     events.extend(flight_events)
+    
+    # Add a couple of synthetic APRS events so the database contains examples
+    # of radio-style traffic for this mission as well.
+    aprs_events = [
+        {
+            "event_type": "aprs",
+            "description": "APRS weather station near mission area",
+            "mission_id": MISSION_ID,
+            "source": "aprs_smoke",
+            "timestamp": now.isoformat(),
+            "event_metadata": {
+                "source_callsign": "TESTWX-1",
+                "dest_callsign": "APRS",
+                "lat": 43.615,
+                "lon": -116.202,
+                "altitude_m": 820.0,
+                "text": "@000000z4336.15N/11612.02W_090/005g010t070r000p000P000h50b10150AmbientWX",
+                "raw_packet": "TESTWX-1>APRS,TCPIP*:@000000z4336.15N/11612.02W_090/005g010t070r000p000P000h50b10150AmbientWX",
+            },
+        },
+        {
+            "event_type": "aprs",
+            "description": "APRS mobile station reporting position",
+            "mission_id": MISSION_ID,
+            "source": "aprs_smoke",
+            "timestamp": (now - timedelta(minutes=5)).isoformat(),
+            "event_metadata": {
+                "source_callsign": "TESTCAR-1",
+                "dest_callsign": "APRS",
+                "lat": 43.60,
+                "lon": -116.25,
+                "altitude_m": 840.0,
+                "text": "!4336.00N/11615.00W>Moving through mission area",
+                "raw_packet": "TESTCAR-1>APRS,TCPIP*:!4336.00N/11615.00W>Moving through mission area",
+            },
+        },
+    ]
+    events.extend(aprs_events)
 
     return events
 
