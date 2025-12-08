@@ -11,6 +11,8 @@ jobs:
   test:
     name: Run tests
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -100,7 +102,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: us-east-1
 
       - name: Discover AWS region and EC2 public DNS
         id: discover-ec2

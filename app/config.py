@@ -12,8 +12,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger("sentinelai.config")
 
-# Shared SSM client for configuration reads
-_ssm_client = boto3.client("ssm")
+# Shared SSM client for configuration reads. Default to a region so imports do
+# not fail in environments without AWS configuration (e.g. CI test runners).
+_ssm_client = boto3.client(
+    "ssm",
+    region_name=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1",
+)
 
 
 @lru_cache(maxsize=1)
