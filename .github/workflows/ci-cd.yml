@@ -178,28 +178,28 @@ jobs:
 
           ssh "$SSH_USER_HOST" <<EOSSH
           set -euo pipefail
+
           ZIP_BASENAME="$ZIP_BASENAME"
           RELEASE_NAME="$RELEASE_NAME"
           REMOTE_DIR="$REMOTE_DIR"
           SERVICE_NAME="$SERVICE_NAME"
 
-          REMOTE_RELEASE_DIR="$REMOTE_DIR/releases/$RELEASE_NAME"
-          REMOTE_ZIP_PATH="$REMOTE_DIR/releases/$ZIP_BASENAME"
+          REMOTE_RELEASE_DIR="\$REMOTE_DIR/releases/\$RELEASE_NAME"
+          REMOTE_ZIP_PATH="\$REMOTE_DIR/releases/\$ZIP_BASENAME"
 
-          sudo systemctl stop "$SERVICE_NAME" || true
+          sudo systemctl stop "\$SERVICE_NAME" || true
 
-          mkdir -p "$REMOTE_RELEASE_DIR"
-          unzip -o "$REMOTE_ZIP_PATH" -d "$REMOTE_RELEASE_DIR"
+          mkdir -p "\$REMOTE_RELEASE_DIR"
+          unzip -o "\$REMOTE_ZIP_PATH" -d "\$REMOTE_RELEASE_DIR"
 
-          python3 -m venv "$REMOTE_RELEASE_DIR/venv"
-          source "$REMOTE_RELEASE_DIR/venv/bin/activate"
+          python3 -m venv "\$REMOTE_RELEASE_DIR/venv"
+          source "\$REMOTE_RELEASE_DIR/venv/bin/activate"
           pip install --upgrade pip
-          pip install -r "$REMOTE_RELEASE_DIR/requirements.txt"
+          pip install -r "\$REMOTE_RELEASE_DIR/requirements.txt"
 
-          ln -sfn "$REMOTE_RELEASE_DIR" "$REMOTE_DIR/current"
-
-          sudo systemctl start "$SERVICE_NAME"
-          sudo systemctl enable "$SERVICE_NAME"
+          ln -sfn "\$REMOTE_RELEASE_DIR" "\$REMOTE_DIR/current"
+          sudo systemctl start "\$SERVICE_NAME"
+          sudo systemctl enable "\$SERVICE_NAME"
           EOSSH
 
       - name: Smoke test
