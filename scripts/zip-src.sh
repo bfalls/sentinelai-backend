@@ -16,9 +16,17 @@ set -euo pipefail
 #   build/sentinel-backend-src-YYYYMMDD-HHMMSS.zip
 # ------------------------------------------------------------------------------
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "$ROOT_DIR"
+
 PROJECT_NAME="sentinel-backend"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 OUTPUT_FILE="${PROJECT_NAME}-src-${TIMESTAMP}.zip"
+BUILD_DIR="$ROOT_DIR/build"
+OUTPUT_PATH="$BUILD_DIR/$OUTPUT_FILE"
+
+mkdir -p "$BUILD_DIR"
 
 echo "Creating source zip: $OUTPUT_FILE"
 echo
@@ -86,8 +94,8 @@ for pattern in "${EXCLUDES[@]}"; do
   ZIP_EXCLUDES+=("-x" "$pattern")
 done
 
-zip -r "$OUTPUT_FILE" . "${ZIP_EXCLUDES[@]}"
+zip -r "$OUTPUT_PATH" . "${ZIP_EXCLUDES[@]}"
 
 echo
 echo "Done"
-echo "Created: $OUTPUT_FILE"
+echo "$OUTPUT_PATH"
