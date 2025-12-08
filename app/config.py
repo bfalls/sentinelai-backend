@@ -2,8 +2,42 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
+from functools import lru_cache
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+logger = logging.getLogger("sentinelai.config")
+
+# Shared SSM client for configuration reads
+_ssm_client = boto3.client("ssm")
+
+
+@lru_cache(maxsize=1)
+def get_openai_api_key() -> str:
+    """Fetch the OpenAI API key from AWS SSM Parameter Store.
+
+    The value is cached in-memory to avoid repeated SSM calls. Any failure to
+    retrieve the key results in a runtime error so the application fails fast.
+    """
+
+    try:
+        response = _ssm_client.get_parameter(
+            Name="/sentinel/openai/api_key", WithDecryption=True
+        )
+        value = response.get("Parameter", {}).get("Value")
+    except (ClientError, BotoCoreError) as exc:  # pragma: no cover - AWS error passthrough
+        logger.error("Failed to load OpenAI API key from SSM: %s", exc)
+        raise RuntimeError("Unable to load OpenAI API key from SSM") from exc
+
+    if not value:
+        logger.error("Received empty OpenAI API key from SSM")
+        raise RuntimeError("OpenAI API key not configured in SSM")
+
+    return value
 
 
 @dataclass
@@ -14,7 +48,6 @@ class Settings:
     log_level: str = os.getenv("SENTINELAI_LOG_LEVEL", "INFO")
 
     # OpenAI / LLM settings
-    openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     openai_timeout: float = float(os.getenv("OPENAI_TIMEOUT", "30.0"))
     debug_ai_endpoints: bool = os.getenv("DEBUG_AI_ENDPOINTS", "false").lower() in {
@@ -80,4 +113,4 @@ class Settings:
 
 settings = Settings()
 
-__all__ = ["settings", "Settings"]
+__all__ = ["settings", "Settings", "get_openai_api_key"]

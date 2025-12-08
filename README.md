@@ -104,7 +104,7 @@ You can adjust as the implementation evolves, but this gives Codex/LLMs a clear 
 
 - Python 3.11+
 - `pip`
-- An OpenAI API key (or compatible LLM endpoint)
+- Access to AWS SSM parameter `/sentinel/openai/api_key` (SecureString)
 
 ## Clone and install
 
@@ -124,33 +124,32 @@ pip install -r requirements-dev.txt
 
 
 ## Configuration
-Configuration is driven by environment variables.
+Configuration is driven by environment variables for non-secret settings. Secrets stay in AWS.
 
-Key AI settings (add these to a local .env for dev):
-- OPENAI_API_KEY: API key for OpenAI (not committed to git).
-- OPENAI_MODEL: Model name (defaults to gpt-4o-mini).
-- DEBUG_AI_ENDPOINTS: Enable /debug/ai-test when true.
+### OpenAI API key via AWS SSM
+- The backend fetches the OpenAI API key from AWS Systems Manager Parameter Store parameter `/sentinel/openai/api_key` as a SecureString with decryption enabled.
+- Do **not** place the key in `.env` files or other configs; rely on the instance profile or your AWS credentials to access SSM at runtime.
+- Ensure the runtime has `AWS_REGION` set (e.g., `us-east-1`) and permission to call `ssm:GetParameter` with decryption.
 
-A typical `.env`:
+### Common environment variables
+Example non-secret environment for local development (still requires AWS credentials to reach SSM):
 
 ```env
-# General
 SENTINELAI_ENV=local
 SENTINELAI_LOG_LEVEL=INFO
+AWS_REGION=us-east-1
 
 # API
 SENTINELAI_HOST=0.0.0.0
 SENTINELAI_PORT=8000
+API_BASE_URL=http://localhost:8000
 
 # OpenAI / LLM
-OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
+OPENAI_TIMEOUT=30
 DEBUG_AI_ENDPOINTS=false
 
 # Sensor ingestion
-SENTINELAI_INGESTORS_ENABLED=aviation,weather
-SENTINELAI_INGEST_INTERVAL_SECONDS=15
-
 ENABLE_WEATHER_INGESTOR=true
 ENABLE_ADSB_INGESTOR=false
 ADSB_BASE_URL=https://opensky-network.org/api/states/all
@@ -188,7 +187,7 @@ Local development example:
 2. Start the API: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
 3. Watch logs for incoming APRS packets; new events will appear in `/api/v1/events` responses and be included automatically when calling `/api/v1/analysis/mission`.
 
-At startup, `config.py` should load these (e.g. via `pydantic-settings` or `python-dotenv`).
+At startup, `app/config.py` loads these flags from the environment and pulls secrets like the OpenAI key directly from SSM.
 
 ## Running the Server Locally
 
@@ -305,9 +304,9 @@ You can start with:
 
 For local tests and offline development, the `ai_planner` service should support a “mock mode”:
 
-- If `OPENAI_API_KEY` is missing and `SENTINELAI_ENV=local_mock`, return canned overlays instead of calling the real API.
+- If SSM access to `/sentinel/openai/api_key` is unavailable and `SENTINELAI_ENV=local_mock`, return canned overlays instead of calling the real API.
 
-This lets you develop the CivTAK plugin and backend integration without burning tokens.
+This lets you develop the CivTAK plugin and backend integration without burning tokens while keeping secrets out of local files.
 
 ### Deployment
 
@@ -340,6 +339,51 @@ deploy/
   aws/
     ec2-notes.md
 ```
+
+### CI/CD (GitHub Actions)
+- Workflow: `.github/workflows/ci-cd.yml`.
+- Pull requests to `main` run pytest on Ubuntu with Python 3.11.
+- Pushes to `main` re-run tests, build a deployable zip via `scripts/zip-src.sh` into `build/`, upload that ZIP as an artifact, and deploy to a single EC2 instance.
+- Deployments discover both the AWS region and the EC2 public DNS from the repository variable `SENTINEL_EC2_INSTANCE_ID` via the AWS CLI (no static hostnames or OIDC roles needed).
+- During deploy, the workflow stops the systemd service, unzips a timestamped release under `$SENTINEL_REMOTE_DIR/releases`, creates/updates a virtualenv, installs requirements (including `boto3`), repoints the `current` symlink, and restarts/enables the service.
+- Optional smoke test hits `https://$SENTINEL_PUBLIC_HOST/api/v1/healthz` after deploy when a public host is provided.
+
+Required repository **secrets**:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION` (bootstrap region for AWS credentials; the workflow derives the instance region dynamically)
+- `SENTINEL_EC2_SSH_KEY` (private key contents for the EC2 user)
+- `SENTINEL_REMOTE_DIR` (e.g., `/opt/sentinelai-backend`)
+- `SENTINEL_PUBLIC_HOST` (optional hostname for post-deploy health check)
+
+Required repository **variables** (non-secret):
+- `SENTINEL_EC2_INSTANCE_ID` (instance ID used to discover the public DNS and region at deploy time)
+- `SENTINEL_SERVICE_NAME` (optional; defaults to `sentinelai-backend.service` when unset)
+
+To provision the OpenAI key used at runtime:
+- Create the SSM SecureString parameter `/sentinel/openai/api_key` with decryption enabled.
+- Ensure the EC2 instance role allows `ssm:GetParameter` on that name with decryption.
+### Systemd service on EC2
+Use a unit like `/etc/systemd/system/sentinelai-backend.service`:
+
+```
+[Unit]
+Description=SentinelAI Backend
+After=network.target
+
+[Service]
+User=sentinel
+WorkingDirectory=/opt/sentinelai-backend/current
+ExecStart=/usr/bin/env python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+Environment="AWS_REGION=us-east-1"
+EnvironmentFile=-/etc/sentinelai-backend.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Keep secrets (like the OpenAI key) out of the unit and env files; the app retrieves `/sentinel/openai/api_key` directly from SSM at runtime. Ensure the instance role allows `ssm:GetParameter` with decryption.
 
 ### Roadmap Ideas
   - Add more ingestors (APRS, blue force trackers, additional aviation sources).
