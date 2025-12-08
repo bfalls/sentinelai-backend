@@ -78,7 +78,7 @@ jobs:
           path: ${{ steps.build-artifact.outputs.zip_path }}
 
   deploy:
-    name: Deploy to EC2
+    name: Deploy to EC2 using SSM Session Manager
     needs: [package]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -100,107 +100,68 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.SENTINEL_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SENTINEL_AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Discover AWS region and EC2 public DNS
-        id: discover-ec2
-        env:
-          INSTANCE_ID: ${{ env.INSTANCE_ID }}
-        run: |
-          set -euo pipefail
-          if [ -z "$INSTANCE_ID" ]; then
-            echo "Repository variable SENTINEL_EC2_INSTANCE_ID is required" >&2
-            exit 1
-          fi
-
-          DESCRIBE_OUTPUT=$(aws ec2 describe-instances \
-            --instance-ids "$INSTANCE_ID" \
-            --query "Reservations[0].Instances[0].[PublicDnsName,Placement.AvailabilityZone]" \
-            --output text)
-
-          PUBLIC_DNS=$(echo "$DESCRIBE_OUTPUT" | awk '{print $1}')
-          AVAILABILITY_ZONE=$(echo "$DESCRIBE_OUTPUT" | awk '{print $2}')
-          REGION=${AVAILABILITY_ZONE::-1}
-
-          if [ -z "$PUBLIC_DNS" ] || [ "$PUBLIC_DNS" = "None" ]; then
-            echo "No public DNS name found for instance $INSTANCE_ID" >&2
-            exit 1
-          fi
-
-          if [ -z "$REGION" ] || [ "$REGION" = "None" ]; then
-            echo "Could not determine region from availability zone" >&2
-            exit 1
-          fi
-
-          echo "host=$PUBLIC_DNS" >> "$GITHUB_OUTPUT"
-          echo "region=$REGION" >> "$GITHUB_OUTPUT"
-          echo "AWS_REGION=$REGION" >> "$GITHUB_ENV"
-
-      - name: Prepare SSH
-        env:
-          DISCOVERED_HOST: ${{ steps.discover-ec2.outputs.host }}
-          SENTINEL_EC2_SSH_KEY: ${{ secrets.SENTINEL_EC2_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "$DISCOVERED_HOST" ]; then
-            echo "Missing discovered host" >&2
-            exit 1
-          fi
-          mkdir -p ~/.ssh
-          echo "$SENTINEL_EC2_SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$DISCOVERED_HOST" >> ~/.ssh/known_hosts
-
-      - name: Deploy artifact
-        env:
-          SSH_HOST: ${{ steps.discover-ec2.outputs.host }}
-          REMOTE_DIR: ${{ env.REMOTE_DIR }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+      - name: Upload ZIP to S3 for SSM to pull
+        id: upload
         run: |
           set -euo pipefail
           ZIP_PATH=$(find artifacts -name "*.zip" -type f | head -n 1)
           if [ -z "$ZIP_PATH" ]; then
-            echo "Deployment artifact not found" >&2
+            echo "No ZIP found" >&2
             exit 1
           fi
 
-          ZIP_BASENAME=$(basename "$ZIP_PATH")
-          RELEASE_NAME=${ZIP_BASENAME%.zip}
-          REMOTE_RELEASE_DIR="$REMOTE_DIR/releases/$RELEASE_NAME"
-          REMOTE_ZIP_PATH="$REMOTE_DIR/releases/$ZIP_BASENAME"
-          SERVICE_NAME=${SERVICE_NAME:-sentinelai-backend.service}
-          SSH_USER_HOST="ec2-user@$SSH_HOST"
+          BUCKET="sentinel-deploy-${GITHUB_REPOSITORY#*/}-${GITHUB_RUN_ID}"
+          aws s3 mb "s3://$BUCKET" || true
 
-          ssh "$SSH_USER_HOST" "mkdir -p '$REMOTE_DIR/releases' '$REMOTE_DIR/current'"
-          scp "$ZIP_PATH" "$SSH_USER_HOST:$REMOTE_ZIP_PATH"
+          aws s3 cp "$ZIP_PATH" "s3://$BUCKET/$(basename "$ZIP_PATH")"
 
-          ssh "$SSH_USER_HOST" <<EOSSH
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "zip_file=$(basename "$ZIP_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Run remote install via SSM
+        id: ssm-deploy
+        run: |
           set -euo pipefail
 
-          ZIP_BASENAME="$ZIP_BASENAME"
-          RELEASE_NAME="$RELEASE_NAME"
-          REMOTE_DIR="$REMOTE_DIR"
-          SERVICE_NAME="$SERVICE_NAME"
+          BUCKET="${{ steps.upload.outputs.bucket }}"
+          ZIP_FILE="${{ steps.upload.outputs.zip_file }}"
+          REMOTE_ZIP_PATH="$REMOTE_DIR/releases/$ZIP_FILE"
+          RELEASE_NAME="${ZIP_FILE%.zip}"
 
-          REMOTE_RELEASE_DIR="\$REMOTE_DIR/releases/\$RELEASE_NAME"
-          REMOTE_ZIP_PATH="\$REMOTE_DIR/releases/\$ZIP_BASENAME"
+          # Run deployment commands remotely on EC2
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "SentinelAI backend deploy" \
+            --parameters commands="[
+              \"set -euo pipefail\",
+              \"sudo mkdir -p $REMOTE_DIR/releases $REMOTE_DIR/current\",
+              \"aws s3 cp s3://$BUCKET/$ZIP_FILE $REMOTE_ZIP_PATH\",
+              \"mkdir -p $REMOTE_DIR/releases/$RELEASE_NAME\",
+              \"sudo systemctl stop $SERVICE_NAME || true\",
+              \"sudo unzip -o $REMOTE_ZIP_PATH -d $REMOTE_DIR/releases/$RELEASE_NAME\",
+              \"python3 -m venv $REMOTE_DIR/releases/$RELEASE_NAME/venv\",
+              \"source $REMOTE_DIR/releases/$RELEASE_NAME/venv/bin/activate\",
+              \"pip install --upgrade pip\",
+              \"pip install -r $REMOTE_DIR/releases/$RELEASE_NAME/requirements.txt\",
+              \"sudo ln -sfn $REMOTE_DIR/releases/$RELEASE_NAME $REMOTE_DIR/current\",
+              \"sudo systemctl start $SERVICE_NAME\",
+              \"sudo systemctl enable $SERVICE_NAME\"
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
 
-          sudo systemctl stop "\$SERVICE_NAME" || true
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
-          mkdir -p "\$REMOTE_RELEASE_DIR"
-          unzip -o "\$REMOTE_ZIP_PATH" -d "\$REMOTE_RELEASE_DIR"
-
-          python3 -m venv "\$REMOTE_RELEASE_DIR/venv"
-          source "\$REMOTE_RELEASE_DIR/venv/bin/activate"
-          pip install --upgrade pip
-          pip install -r "\$REMOTE_RELEASE_DIR/requirements.txt"
-
-          ln -sfn "\$REMOTE_RELEASE_DIR" "\$REMOTE_DIR/current"
-          sudo systemctl start "\$SERVICE_NAME"
-          sudo systemctl enable "\$SERVICE_NAME"
-          EOSSH
+      - name: Wait for SSM command to finish
+        run: |
+          aws ssm list-command-invocations \
+            --command-id "${{ steps.ssm-deploy.outputs.command_id }}" \
+            --details
 
       - name: Smoke test
         if: env.PUBLIC_HOST != ''
