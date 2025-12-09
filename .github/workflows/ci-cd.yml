@@ -149,6 +149,7 @@ jobs:
               \"pip install --upgrade pip\",
               \"pip install -r $REMOTE_DIR/releases/$RELEASE_NAME/requirements.txt\",
               \"sudo ln -sfn $REMOTE_DIR/releases/$RELEASE_NAME $REMOTE_DIR/current\",
+              \"ls -1dt $REMOTE_DIR/releases/sentinel-backend-src-* 2>/dev/null | tail -n +6 | xargs -r sudo rm -rf\",
               \"sudo systemctl daemon-reload\",
               \"sudo systemctl restart $SERVICE_NAME\"
             ]" \
