@@ -16,7 +16,8 @@
     "zip": "bash scripts/zip-src.sh",
     "clean-zips": "scripts/clean-zips.sh",
     "service-start": "ssh $SENTINEL_EC2_HOST 'sudo systemctl start sentinelai-backend.service'",
-    "service-stop": "ssh $SENTINEL_EC2_HOST 'sudo systemctl stop sentinelai-backend.service'"
+    "service-stop": "ssh $SENTINEL_EC2_HOST 'sudo systemctl stop sentinelai-backend.service'",
+    "ssh-aws": "scripts/ssh-aws.sh"
   },
   "keywords": [],
   "author": "Barnaby Falls <bfalls@outlook.com>",

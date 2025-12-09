@@ -23,10 +23,7 @@ cd "$ROOT_DIR"
 PROJECT_NAME="sentinel-backend"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 OUTPUT_FILE="${PROJECT_NAME}-src-${TIMESTAMP}.zip"
-BUILD_DIR="$ROOT_DIR/build"
-OUTPUT_PATH="$BUILD_DIR/$OUTPUT_FILE"
-
-mkdir -p "$BUILD_DIR"
+OUTPUT_PATH="./$OUTPUT_FILE"
 
 echo "Creating source zip: $OUTPUT_FILE"
 echo
@@ -75,7 +72,6 @@ EXCLUDES=(
   ".git/*"
   ".gitignore"
   ".gitattributes"
-  ".github/*"
 
   # Editors / IDEs
   ".vscode/*"
