@@ -144,7 +144,7 @@ jobs:
               \"mkdir -p $REMOTE_DIR/releases/$RELEASE_NAME\",
               \"sudo systemctl stop $SERVICE_NAME || true\",
               \"sudo unzip -o $REMOTE_ZIP_PATH -d $REMOTE_DIR/releases/$RELEASE_NAME\",
-              \"python3 -m venv $REMOTE_DIR/releases/$RELEASE_NAME/venv\",
+              \"python3.11 -m venv $REMOTE_DIR/releases/$RELEASE_NAME/venv\",
               \"source $REMOTE_DIR/releases/$RELEASE_NAME/venv/bin/activate\",
               \"pip install --upgrade pip\",
               \"pip install -r $REMOTE_DIR/releases/$RELEASE_NAME/requirements.txt\",
