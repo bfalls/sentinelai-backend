@@ -55,6 +55,7 @@ class Settings:
     # OpenAI / LLM settings
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     openai_timeout: float = float(os.getenv("OPENAI_TIMEOUT", "30.0"))
+    openai_api_key: str = ""
     debug_ai_endpoints: bool = os.getenv("DEBUG_AI_ENDPOINTS", "false").lower() in {
         "1",
         "true",
@@ -117,5 +118,11 @@ class Settings:
 
 
 settings = Settings()
+
+# Populate the API key lazily so tests can override behavior via env
+try:
+    settings.openai_api_key = get_openai_api_key()
+except RuntimeError:
+    logger.warning("OpenAI API key not available at import time")
 
 __all__ = ["settings", "Settings", "get_openai_api_key"]
