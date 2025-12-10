@@ -70,9 +70,7 @@ async def lifespan(app: FastAPI):
             await client.aclose()
 
 
-app = FastAPI(title="SentinelAI Backend")
-
-
+app = FastAPI(title="SentinelAI Backend", lifespan=lifespan)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
