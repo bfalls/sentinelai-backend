@@ -15,8 +15,10 @@ except ImportError:  # pragma: no cover - handled in runtime checks
     func = None
     Session = Any  # type: ignore
 
+from app.config import settings
 from app.domain import DEFAULT_INTENT, MissionIntent
 from app.ingestors import AprsMessage
+from app.models.analysis import MissionAnalysisRequest
 from app.models.air_traffic import AircraftTrack
 from app.models.weather import TimeWindow, WeatherSnapshot
 from app.services import openai_client
@@ -174,6 +176,142 @@ class MissionContextPayload:
     weather: WeatherSnapshot | None = None
     air_traffic: list[AircraftTrack] | None = None
     aprs_messages: list[AprsMessage] | None = None
+
+
+@dataclass
+class IntentDefinition:
+    """Intent metadata used for AI-driven classification."""
+
+    id: MissionIntent
+    label: str
+    description: str
+    guidance: str
+
+
+def _get_candidate_intents() -> list[IntentDefinition]:
+    """Return the set of intents the AI model can classify and analyze."""
+
+    return [
+        IntentDefinition(
+            id=MissionIntent.SITUATIONAL_AWARENESS,
+            label="Situational Awareness",
+            description="General situational summary of events and activity near the mission location.",
+            guidance="Summarize key activity, risks, and recommended actions for the operator.",
+        ),
+        IntentDefinition(
+            id=MissionIntent.ROUTE_RISK_ASSESSMENT,
+            label="Route Risk Assessment",
+            description="Assess risks related to movement or routing for the mission team.",
+            guidance="Identify chokepoints, hazards along potential routes, and mitigation steps.",
+        ),
+        IntentDefinition(
+            id=MissionIntent.WEATHER_IMPACT,
+            label="Weather Impact",
+            description="Evaluate how weather conditions affect mission execution.",
+            guidance="Highlight weather-related hazards, timing, and operational constraints.",
+        ),
+        IntentDefinition(
+            id=MissionIntent.AIRSPACE_DECONFLICTION,
+            label="Airspace Deconfliction",
+            description="Identify and describe airspace conflicts or coordination needs.",
+            guidance="Summarize conflicting flight activity and coordination requirements for safe operations.",
+        ),
+    ]
+
+
+def _build_classification_payload(
+    payload: MissionContextPayload, request: MissionAnalysisRequest
+) -> dict[str, Any]:
+    """Construct the JSON payload sent to OpenAI for intent + analysis."""
+
+    signals_payload = []
+    for signal in payload.signals or []:
+        signals_payload.append(
+            {
+                "type": signal.type,
+                "description": signal.description,
+                "timestamp": signal.timestamp.isoformat() if signal.timestamp else None,
+                "metadata": signal.metadata,
+            }
+        )
+
+    mission_location = None
+    if payload.mission_location:
+        mission_location = {
+            "latitude": payload.mission_location.latitude,
+            "longitude": payload.mission_location.longitude,
+            "description": payload.mission_location.description,
+        }
+
+    time_window = None
+    if payload.time_window:
+        time_window = {
+            "start": payload.time_window.start.isoformat() if payload.time_window.start else None,
+            "end": payload.time_window.end.isoformat() if payload.time_window.end else None,
+        }
+
+    weather_snapshot = None
+    if payload.weather:
+        weather_snapshot = {
+            "as_of": payload.weather.as_of.isoformat(),
+            "latitude": payload.weather.latitude,
+            "longitude": payload.weather.longitude,
+            "temperature_c": payload.weather.temperature_c,
+            "wind_speed_mps": payload.weather.wind_speed_mps,
+            "wind_direction_deg": payload.weather.wind_direction_deg,
+            "precipitation_probability_pct": payload.weather.precipitation_probability_pct,
+            "precipitation_mm": payload.weather.precipitation_mm,
+            "visibility_km": payload.weather.visibility_km,
+            "cloud_cover_pct": payload.weather.cloud_cover_pct,
+            "condition": payload.weather.condition,
+        }
+
+    air_traffic_summary = _summarize_air_traffic(payload) or []
+    aprs_summary = _summarize_aprs(payload) or []
+
+    logger.info(
+        "Building classification payload: signals=%s air_tracks=%s aprs_msgs=%s",
+        len(signals_payload),
+        len(payload.air_traffic or []),
+        len(payload.aprs_messages or []),
+    )
+
+    return {
+        "mission": {
+            "mission_id": payload.mission_id,
+            "mission_metadata": payload.mission_metadata,
+        },
+        "request": {
+            "notes": request.notes,
+        },
+        "context": {
+            "signals": signals_payload,
+            "notes": payload.notes,
+            "location": mission_location,
+            "time_window": time_window,
+            "weather_snapshot": weather_snapshot,
+            "air_traffic_tracks": len(payload.air_traffic or []),
+            "air_traffic_summary": air_traffic_summary,
+            "aprs_messages": len(payload.aprs_messages or []),
+            "aprs_summary": aprs_summary,
+        },
+        "candidate_intents": [
+            {
+                "id": intent.id.value,
+                "label": intent.label,
+                "description": intent.description,
+                "guidance": intent.guidance,
+            }
+            for intent in _get_candidate_intents()
+        ],
+        "response_schema": {
+            "intent_id": "One of the candidate intent IDs provided above.",
+            "intent_label": "Human-readable label for the selected intent.",
+            "summary": "Concise mission summary.",
+            "risks": "List of notable risks.",
+            "recommendations": "List of recommended actions.",
+        },
+    }
 
 
 def _build_prompt_from_payload(payload: MissionContextPayload) -> str:
@@ -482,6 +620,59 @@ async def analyze_mission(
     return await handler(payload, system_message)
 
 
+async def analyze_mission_auto_intent(
+    request: MissionAnalysisRequest,
+    payload: MissionContextPayload,
+    *,
+    system_message: str | None = None,
+) -> MissionAnalysisResult:
+    """Perform intent classification and mission analysis in a single OpenAI call."""
+
+    classification_payload = _build_classification_payload(payload, request)
+    system_prompt = system_message or (
+        "You are SentinelAI, an assistant for mission analysts. Given candidate intents "
+        "and mission context, select the single best intent and produce an analysis. "
+        "Respond ONLY with a JSON object containing intent_id, intent_label, summary, "
+        "risks (list of strings), and recommendations (list of strings)."
+    )
+
+    try:
+        result_data = await openai_client.analyze_mission_with_intent_single_call(
+            model=settings.openai_model,
+            system_message=system_prompt,
+            classification_payload=classification_payload,
+        )
+        intent_id = result_data.get("intent_id")
+        intent_label = result_data.get("intent_label")
+        summary = result_data.get("summary") or ""
+        risks = result_data.get("risks") or []
+        recommendations = result_data.get("recommendations") or []
+
+        if not isinstance(risks, list):
+            risks = [str(risks)]
+        if not isinstance(recommendations, list):
+            recommendations = [str(recommendations)]
+
+        selected_intent = MissionIntent(intent_id) if intent_id else DEFAULT_INTENT
+        logger.info(
+            "AI selected intent: id=%s label=%s", intent_id, intent_label or selected_intent
+        )
+        return MissionAnalysisResult(
+            intent=selected_intent,
+            summary=summary.strip(),
+            risks=list(risks),
+            recommendations=list(recommendations),
+        )
+    except (ValueError, RuntimeError) as exc:
+        logger.error("AI classification+analysis failed: %s", exc)
+        return MissionAnalysisResult(
+            intent=DEFAULT_INTENT,
+            summary="AI analysis is currently unavailable. Please try again later.",
+            risks=[],
+            recommendations=[],
+        )
+
+
 __all__ = [
     "AnalysisEngine",
     "AnalysisResult",
@@ -492,6 +683,7 @@ __all__ = [
     "MissionAnalysisResult",
     "MissionIntent",
     "INTENT_HANDLERS",
+    "analyze_mission_auto_intent",
     "analyze_mission",
     "get_analysis_engine",
 ]

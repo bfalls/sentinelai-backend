@@ -14,7 +14,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.api import analysis as analysis_module
-from app.domain import DEFAULT_INTENT, MissionIntent
+from app.domain import MissionIntent
 from app.models.analysis import MissionAnalysisRequest
 from app.services.analysis_engine import MissionAnalysisResult, MissionContextPayload
 
@@ -23,17 +23,22 @@ from app.services.analysis_engine import MissionAnalysisResult, MissionContextPa
 async def test_mission_analysis_defaults_intent(monkeypatch):
     captured: dict[str, Any] = {}
 
-    async def fake_analyze(payload: MissionContextPayload, *, intent, system_message=None):
-        captured["intent"] = intent
-        return MissionAnalysisResult(intent=intent, summary="ok", risks=[], recommendations=[])
+    async def fake_analyze_auto(request_payload, payload: MissionContextPayload, *, system_message=None):
+        captured["intent"] = MissionIntent.AIRSPACE_DECONFLICTION
+        return MissionAnalysisResult(
+            intent=MissionIntent.AIRSPACE_DECONFLICTION,
+            summary="ok",
+            risks=[],
+            recommendations=[],
+        )
 
-    monkeypatch.setattr(analysis_module, "analyze_mission", fake_analyze)
+    monkeypatch.setattr(analysis_module, "analyze_mission_auto_intent", fake_analyze_auto)
 
     request = MissionAnalysisRequest(mission_id="abc")
     response = await analysis_module.analyze_mission_context(request, db=None)
 
-    assert response.intent == DEFAULT_INTENT
-    assert captured["intent"] == DEFAULT_INTENT
+    assert response.intent == MissionIntent.AIRSPACE_DECONFLICTION
+    assert captured["intent"] == MissionIntent.AIRSPACE_DECONFLICTION
 
 
 @pytest.mark.anyio

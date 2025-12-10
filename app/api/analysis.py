@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import db_models
-from app.domain import DEFAULT_INTENT
 from app.db import get_db, maybe_cleanup_old_records
 from app.models.analysis import (
     AnalysisStatusResponse,
@@ -18,6 +17,7 @@ from app.services import (
     MissionAnalysisResult,
     MissionIntent as MissionIntentType,
     analyze_mission,
+    analyze_mission_auto_intent,
     build_context_payload,
     get_analysis_engine,
 )
@@ -79,12 +79,15 @@ async def analyze_mission_context(
     """Route mission analysis requests to the AI engine based on intent."""
 
     payload = await build_context_payload(request, db=db)
-    intent: MissionIntentType = request.intent or DEFAULT_INTENT
+    intent: MissionIntentType | None = request.intent
 
     try:
-        result: MissionAnalysisResult = await analyze_mission(
-            payload, intent=intent
-        )
+        if intent is not None:
+            result: MissionAnalysisResult = await analyze_mission(
+                payload, intent=intent
+            )
+        else:
+            result = await analyze_mission_auto_intent(request, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)

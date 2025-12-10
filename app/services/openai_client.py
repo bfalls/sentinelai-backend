@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -63,4 +64,42 @@ async def analyze_mission_context(prompt: str, *, system_message: str | None = N
         raise RuntimeError("AI service unavailable") from exc
 
 
-__all__ = ["analyze_mission_context", "get_client"]
+async def analyze_mission_with_intent_single_call(
+    *, model: str, system_message: str, classification_payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Classify mission intent and generate analysis in a single OpenAI call."""
+
+    if not OPENAI_AVAILABLE:
+        raise RuntimeError("OpenAI client library is not installed")
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": json.dumps(classification_payload)},
+    ]
+
+    try:
+        client = get_client()
+        response = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.2,
+            max_tokens=600,
+        )
+        content = response.choices[0].message.content or ""
+        return json.loads(content)
+    except (APITimeoutError, RateLimitError, APIError) as exc:
+        logger.error("OpenAI API error: %s", exc)
+        raise RuntimeError("AI service temporarily unavailable") from exc
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to decode OpenAI response as JSON: %s", exc)
+        raise RuntimeError("AI response format invalid") from exc
+    except Exception as exc:  # pragma: no cover - safeguard
+        logger.exception("Unexpected OpenAI failure")
+        raise RuntimeError("AI service unavailable") from exc
+
+
+__all__ = [
+    "analyze_mission_context",
+    "analyze_mission_with_intent_single_call",
+    "get_client",
+]
