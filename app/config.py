@@ -50,6 +50,7 @@ class Settings:
 
     sentinellai_env: str = os.getenv("SENTINELAI_ENV", "local")
     log_level: str = os.getenv("SENTINELAI_LOG_LEVEL", "INFO")
+    retention_days: int = int(os.getenv("SENTINELAI_RETENTION_DAYS", "7"))
 
     # OpenAI / LLM settings
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

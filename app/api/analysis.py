@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import db_models
 from app.domain import DEFAULT_INTENT
-from app.db import get_db
+from app.db import get_db, maybe_cleanup_old_records
 from app.models.analysis import (
     AnalysisStatusResponse,
     MissionAnalysisRequest,
@@ -111,3 +111,4 @@ def _persist_snapshot(db: Session, result: AnalysisResult) -> None:
     )
     db.add(snapshot)
     db.commit()
+    maybe_cleanup_old_records(db)
