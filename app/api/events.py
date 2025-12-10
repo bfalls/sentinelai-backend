@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import db_models
-from app.db import get_db
+from app.db import get_db, maybe_cleanup_old_records
 from app.models import Event, EventCreateResponse
 
 router = APIRouter(prefix="/api/v1", tags=["events"])
@@ -49,6 +49,7 @@ async def create_event(event: Event, db: Session = Depends(get_db)) -> EventCrea
 
     db.add(record)
     db.commit()
+    maybe_cleanup_old_records(db)
 
     logger.info("Stored event %s of type %s", event_id, event.event_type)
     return EventCreateResponse(id=event_id, status="received")
