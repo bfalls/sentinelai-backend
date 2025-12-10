@@ -55,6 +55,7 @@ class Settings:
     # OpenAI / LLM settings
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     openai_timeout: float = float(os.getenv("OPENAI_TIMEOUT", "30.0"))
+    openai_api_key: str = get_openai_api_key()
     debug_ai_endpoints: bool = os.getenv("DEBUG_AI_ENDPOINTS", "false").lower() in {
         "1",
         "true",
