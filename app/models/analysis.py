@@ -7,7 +7,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.domain import DEFAULT_INTENT, MissionIntent
+from app.domain import MissionIntent
 from app.models.weather import TimeWindow
 
 
@@ -74,9 +74,9 @@ class MissionAnalysisRequest(BaseModel):
     time_window: Optional[TimeWindow] = Field(
         default=None, description="Time window for weather or temporal context",
     )
-    intent: MissionIntent = Field(
-        default=DEFAULT_INTENT,
-        description="Desired analysis intent that shapes AI behavior",
+    intent: Optional[MissionIntent] = Field(
+        default=None,
+        description="Desired analysis intent that shapes AI behavior; optional for auto-selection",
     )
 
 

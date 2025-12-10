@@ -7,6 +7,7 @@ from app import db_models
 from app.api import analysis as analysis_module
 from app.config import settings
 from app.db import SessionLocal, init_db
+from app.domain import MissionIntent
 from app.main import app
 from app.services.analysis_engine import MissionAnalysisResult, MissionContextPayload
 
@@ -40,11 +41,18 @@ async def test_analysis_includes_aprs_messages(monkeypatch):
 
         captured: dict[str, MissionContextPayload] = {}
 
-        async def fake_analyze(payload: MissionContextPayload, *, intent, system_message=None):
+        async def fake_analyze_auto(
+            request_payload, payload: MissionContextPayload, *, system_message=None
+        ):
             captured["payload"] = payload
-            return MissionAnalysisResult(intent=intent, summary="ok", risks=[], recommendations=[])
+            return MissionAnalysisResult(
+                intent=request_payload.intent or MissionIntent.SITUATIONAL_AWARENESS,
+                summary="ok",
+                risks=[],
+                recommendations=[],
+            )
 
-        monkeypatch.setattr(analysis_module, "analyze_mission", fake_analyze)
+        monkeypatch.setattr(analysis_module, "analyze_mission_auto_intent", fake_analyze_auto)
 
         with TestClient(app) as client:
             response = client.post(
