@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import re
 import json
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Only imported for static typing; does NOT run at runtime.
+    from openai import AsyncOpenAI, APIError, APITimeoutError, RateLimitError
 
 try:  # pragma: no cover - import guard for environments without OpenAI installed
     from openai import APIError, APITimeoutError, AsyncOpenAI, RateLimitError
 except ImportError:  # pragma: no cover - handled at runtime
-    APIError = APITimeoutError = AsyncOpenAI = RateLimitError = None  # type: ignore
-
+    raise
+    
 from app.config import settings
 
 logger = logging.getLogger("sentinelai.openai")
@@ -63,6 +68,35 @@ async def analyze_mission_context(prompt: str, *, system_message: str | None = N
         logger.exception("Unexpected OpenAI failure")
         raise RuntimeError("AI service unavailable") from exc
 
+def _extract_json_object(text: str) -> dict[str, Any]:
+    """
+    Extract and parse the first JSON object in the given text.
+
+    Handles cases where the model wraps the JSON in ```json ... ``` fences,
+    or where extra commentary appears before/after the object.
+    """
+
+    # 1) Try direct parse first (fast path)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass  # fall through to more robust parsing
+
+    # 2) Strip Markdown code fences if present
+    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fence_match:
+        json_str = fence_match.group(1)
+        return json.loads(json_str)
+
+    # 3) Fallback: grab from the first '{' to the last '}' in the string
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        json_str = text[start : end + 1]
+        return json.loads(json_str)
+
+    # If we still can't parse, rethrow a JSON error so the caller's except can handle it
+    raise json.JSONDecodeError("No JSON object found in text", text, 0)
 
 async def analyze_mission_with_intent_single_call(
     *, model: str, system_message: str, classification_payload: dict[str, Any]
@@ -86,7 +120,8 @@ async def analyze_mission_with_intent_single_call(
             max_tokens=600,
         )
         content = response.choices[0].message.content or ""
-        return json.loads(content)
+        logger.debug("Raw OpenAI content for intent+analysis: %r", content)
+        return _extract_json_object(content)
     except (APITimeoutError, RateLimitError, APIError) as exc:
         logger.error("OpenAI API error: %s", exc)
         raise RuntimeError("AI service temporarily unavailable") from exc
