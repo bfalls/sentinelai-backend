@@ -208,7 +208,7 @@ def _get_candidate_intents() -> list[IntentDefinition]:
             id=MissionIntent.WEATHER_IMPACT,
             label="Weather Impact",
             description="Evaluate how weather conditions affect mission execution.",
-            guidance="Highlight weather-related hazards, timing, and operational constraints.",
+            guidance="Give exact temperature, wind speed and direction, precipitation info, visibility, and cloud cover. Highlight weather-related hazards, timing, and operational constraints.",
         ),
         IntentDefinition(
             id=MissionIntent.AIRSPACE_DECONFLICTION,
@@ -216,6 +216,23 @@ def _get_candidate_intents() -> list[IntentDefinition]:
             description="Identify and describe airspace conflicts or coordination needs.",
             guidance="Summarize conflicting flight activity and coordination requirements for safe operations.",
         ),
+        IntentDefinition(
+            id=MissionIntent.AIR_ACTIVITY_ANALYSIS,
+            label="Aircraft Activity Analysis",
+            description="Analyze ADS-B tracks and identify aircraft exhibiting unusual behavior, low-altitude patterns, holding loops, or training maneuvers.",
+            guidance="Report exactly which aircraft were detected, how many, their altitude/speed changes, heading stability, and whether any show signs of abnormal behavior. Name aircraft (ICAO or callsign) if available. If no aircraft are present, explicitly say so.",
+        ),
+        IntentDefinition(
+            id=MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS,
+            label="APRS Activity Analysis",
+            description="Analyze APRS packet traffic within the area and time window, identifying units, movement patterns, signal anomalies, or unusual transmission behavior.",
+            guidance=(
+                "Give exact identification details."
+                "Report which APRS stations transmitted, how many packets were received, "
+                "their approximate locations or movement if available, timestamps, and message content trends. "
+                "If no APRS packets are present, explicitly state that."
+    ),
+)
     ]
 
 
@@ -596,12 +613,53 @@ async def _handle_airspace_deconfliction(
         recommendations=[],
     )
 
+async def _handle_air_activity(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.AIR_ACTIVITY_ANALYSIS,
+        [
+            "Provide an airspace activity overview.",
+            "Identify air traffic activity and report flight details.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.AIR_ACTIVITY_ANALYSIS,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
+async def _handle_radio_signal_activity(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS,
+        [
+            "Provide an overview of radio signal activity.",
+            "Give specific radio signal data for the mission.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
 
 INTENT_HANDLERS: dict[MissionIntent, MissionIntentHandler] = {
     MissionIntent.SITUATIONAL_AWARENESS: _handle_situational_awareness,
     MissionIntent.ROUTE_RISK_ASSESSMENT: _handle_route_risk_assessment,
     MissionIntent.WEATHER_IMPACT: _handle_weather_impact,
     MissionIntent.AIRSPACE_DECONFLICTION: _handle_airspace_deconfliction,
+    MissionIntent.AIR_ACTIVITY_ANALYSIS: _handle_air_activity,
+    MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS: _handle_radio_signal_activity,
+
 }
 
 
@@ -631,9 +689,11 @@ async def analyze_mission_auto_intent(
     classification_payload = _build_classification_payload(payload, request)
     system_prompt = system_message or (
         "You are SentinelAI, an assistant for mission analysts. Given candidate intents "
-        "and mission context, select the single best intent and produce an analysis. "
+        "and mission context, select the single best intent and perform the mission analysis *strictly according* to that intent’s guidance. "
         "Respond ONLY with a JSON object containing intent_id, intent_label, summary, "
         "risks (list of strings), and recommendations (list of strings)."
+        "Your analysis must be concrete, not vague."
+        "Never invent data beyond what is provided."
     )
 
     try:
