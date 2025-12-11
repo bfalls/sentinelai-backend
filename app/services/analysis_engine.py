@@ -613,12 +613,53 @@ async def _handle_airspace_deconfliction(
         recommendations=[],
     )
 
+async def _handle_air_activity(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.AIR_ACTIVITY_ANALYSIS,
+        [
+            "Provide an airspace activity overview.",
+            "Identify air traffic activity and report flight details.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.AIR_ACTIVITY_ANALYSIS,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
+async def _handle_radio_signal_activity(
+    payload: MissionContextPayload, system_message: str | None
+) -> MissionAnalysisResult:
+    prompt = _build_intent_prompt(
+        payload,
+        MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS,
+        [
+            "Provide an overview of radio signal activity.",
+            "Give specific radio signal data for the mission.",
+        ],
+    )
+    response = await _call_openai(prompt, system_message)
+    return MissionAnalysisResult(
+        intent=MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS,
+        summary=response.strip(),
+        risks=[],
+        recommendations=[],
+    )
+
 
 INTENT_HANDLERS: dict[MissionIntent, MissionIntentHandler] = {
     MissionIntent.SITUATIONAL_AWARENESS: _handle_situational_awareness,
     MissionIntent.ROUTE_RISK_ASSESSMENT: _handle_route_risk_assessment,
     MissionIntent.WEATHER_IMPACT: _handle_weather_impact,
     MissionIntent.AIRSPACE_DECONFLICTION: _handle_airspace_deconfliction,
+    MissionIntent.AIR_ACTIVITY_ANALYSIS: _handle_air_activity,
+    MissionIntent.RADIO_SIGNAL_ACTIVITY_ANALYSIS: _handle_radio_signal_activity,
+
 }
 
 
