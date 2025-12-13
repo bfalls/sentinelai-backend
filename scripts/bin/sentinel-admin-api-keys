@@ -1,13 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="/etc/sentinelai-backend.env"
+DEFAULT_REPO_DIR="/opt/sentinelai-backend/current"
+REPO_DIR="${SENTINEL_REPO_DIR:-$DEFAULT_REPO_DIR}"
+ENV_FILE="${SENTINEL_ENV_FILE:-/etc/sentinelai-backend.env}"
+PY="$REPO_DIR/venv/bin/python"
 
-exec sudo -u sentinel -H bash -lc "
+# Re-exec as sentinel if needed
+if [[ "${USER:-}" != "sentinel" ]]; then
+  exec sudo -u sentinel -H -- "$0" "$@"
+fi
+
+if [[ -f "$ENV_FILE" ]]; then
   set -a
-  source '$ENV_FILE'
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
   set +a
-  cd '$REPO_DIR'
-  ./venv/bin/python -m scripts.admin_api_keys $*
-"
+else
+  echo "Missing env file: $ENV_FILE" >&2
+  exit 2
+fi
+
+if [[ ! -x "$PY" ]]; then
+  echo "Python not found/executable at: $PY" >&2
+  echo "REPO_DIR is: $REPO_DIR" >&2
+  exit 3
+fi
+
+cd "$REPO_DIR"
+exec "$PY" -m scripts.admin_api_keys "$@"
