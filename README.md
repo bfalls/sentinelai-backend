@@ -128,6 +128,7 @@ Configuration is driven by environment variables for non-secret settings. Secret
 
 ### OpenAI API key via AWS SSM
 - The backend fetches the OpenAI API key from AWS Systems Manager Parameter Store parameter `/sentinel/openai/api_key` as a SecureString with decryption enabled.
+- The API key pepper is stored in AWS Systems Manager Parameter Store parameter `/sentinel/api_key_pepper` as a SecureString with decryption enabled.
 - Do **not** place the key in `.env` files or other configs; rely on the instance profile or your AWS credentials to access SSM at runtime.
 - Ensure the runtime has `AWS_REGION` set (e.g., `us-east-1`) and permission to call `ssm:GetParameter` with decryption.
 
@@ -165,7 +166,6 @@ server-side pepper; the plaintext key is only shown when created.
 
 Environment flags:
 
-- `API_KEY_PEPPER` (required when `REQUIRE_API_KEY` is true)
 - `REQUIRE_API_KEY` (defaults to `true` in `SENTINELAI_ENV=prod`, otherwise
   `false`)
 
