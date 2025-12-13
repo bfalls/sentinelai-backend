@@ -21,8 +21,11 @@ from app.services import (
     build_context_payload,
     get_analysis_engine,
 )
+from app.security import require_api_key
 
-router = APIRouter(prefix="/api/v1", tags=["analysis"])
+router = APIRouter(
+    prefix="/api/v1", tags=["analysis"], dependencies=[Depends(require_api_key)]
+)
 
 logger = logging.getLogger("sentinelai.analysis")
 

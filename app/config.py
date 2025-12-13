@@ -20,6 +20,16 @@ _ssm_client = boto3.client(
 )
 
 
+def _get_bool(env_var: str, default: bool = False) -> bool:
+    """Parse an environment variable into a boolean with a default."""
+
+    value = os.getenv(env_var)
+    if value is None:
+        return default
+
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
 @lru_cache(maxsize=1)
 def get_openai_api_key() -> str:
     """Fetch the OpenAI API key from AWS SSM Parameter Store.
@@ -97,24 +107,38 @@ class Settings:
     aprs_port: int = int(os.getenv("APRS_PORT", "14580"))
     aprs_callsign: str | None = os.getenv("APRS_CALLSIGN")
     aprs_passcode: str | None = os.getenv("APRS_PASSCODE")
-    aprs_filter_center_lat: float | None = (
-        float(os.getenv("APRS_FILTER_CENTER_LAT"))
-        if os.getenv("APRS_FILTER_CENTER_LAT")
-        else None
-    )
-    aprs_filter_center_lon: float | None = (
-        float(os.getenv("APRS_FILTER_CENTER_LON"))
-        if os.getenv("APRS_FILTER_CENTER_LON")
-        else None
-    )
-    aprs_filter_radius_km: float | None = (
-        float(os.getenv("APRS_FILTER_RADIUS_KM"))
-        if os.getenv("APRS_FILTER_RADIUS_KM")
-        else None
-    )
+    _aprs_lat = os.getenv("APRS_FILTER_CENTER_LAT")
+    aprs_filter_center_lat: float | None = float(_aprs_lat) if _aprs_lat else None # this pattern avoids Pylance (reportArgumentType) errors
+    # aprs_filter_center_lat: float | None = (
+    #     float(os.getenv("APRS_FILTER_CENTER_LAT"))
+    #     if os.getenv("APRS_FILTER_CENTER_LAT")
+    #     else None
+    # )
+    _aprs_lon = os.getenv("APRS_FILTER_CENTER_LON")
+    aprs_filter_center_lon: float | None = float(_aprs_lon) if _aprs_lon else None
+    # aprs_filter_center_lon: float | None = (
+    #     float(os.getenv("APRS_FILTER_CENTER_LON"))
+    #     if os.getenv("APRS_FILTER_CENTER_LON")
+    #     else None
+    # )
+    _aprs_radius = os.getenv("APRS_FILTER_RADIUS_KM")
+    aprs_filter_radius_km: float | None = float(_aprs_radius) if _aprs_radius else None
+    # aprs_filter_radius_km: float | None = (
+    #     float(os.getenv("APRS_FILTER_RADIUS_KM"))
+    #     if os.getenv("APRS_FILTER_RADIUS_KM")
+    #     else None
+    # )
     aprs_filter: str | None = os.getenv("APRS_FILTER")
 
     api_base_url: str = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+    # API key authentication
+    api_key_pepper: str = os.getenv("API_KEY_PEPPER", "")
+    require_api_key: bool = _get_bool(
+        "REQUIRE_API_KEY",
+        default=os.getenv("SENTINELAI_ENV", "local").lower()
+        in {"prod", "production"},
+    )
 
 
 settings = Settings()

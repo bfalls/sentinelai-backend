@@ -6,12 +6,13 @@ import logging
 import time
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 
 from app.api import api_router
 from app.config import settings
 from app.db import init_db
 from app.ingestors import APRSIngestor, build_aprs_config
+from app.security import ApiKeyPrincipal, require_api_key
 
 logging.basicConfig(
     level=settings.log_level.upper(),
@@ -93,7 +94,7 @@ app.include_router(api_router)
 
 
 @app.get("/", summary="Root")
-def read_root() -> dict[str, str]:
+def read_root(_: ApiKeyPrincipal = Depends(require_api_key)) -> dict[str, str]:
     """Basic root endpoint for quick verification."""
 
     return {"message": "SentinelAI backend is running"}

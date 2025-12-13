@@ -11,8 +11,11 @@ from sqlalchemy.orm import Session
 from app import db_models
 from app.db import get_db, maybe_cleanup_old_records
 from app.models import Event, EventCreateResponse
+from app.security import require_api_key
 
-router = APIRouter(prefix="/api/v1", tags=["events"])
+router = APIRouter(
+    prefix="/api/v1", tags=["events"], dependencies=[Depends(require_api_key)]
+)
 
 logger = logging.getLogger("sentinelai.events")
 
