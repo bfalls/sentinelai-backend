@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="/etc/sentinelai-backend.env"
+
+exec sudo -u sentinel -H bash -lc "
+  set -a
+  source '$ENV_FILE'
+  set +a
+  cd '$REPO_DIR'
+  ./venv/bin/python -m scripts.admin_api_keys $*
+"
