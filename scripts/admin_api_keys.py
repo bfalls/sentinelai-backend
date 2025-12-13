@@ -21,7 +21,7 @@ from app.security.api_keys import generate_api_key, hash_api_key, key_prefix
 
 def _ensure_pepper() -> str:
     if not settings.api_key_pepper:
-        sys.stderr.write("API_KEY_PEPPER must be configured to manage API keys.\n")
+        sys.stderr.write("API key pepper must be configured to manage API keys.\n")
         raise SystemExit(1)
     return settings.api_key_pepper
 

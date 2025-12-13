@@ -54,6 +54,26 @@ def get_openai_api_key() -> str:
     return value
 
 
+@lru_cache(maxsize=1)
+def get_api_key_pepper() -> str:
+    """Fetch the API key pepper from AWS SSM Parameter Store."""
+
+    try:
+        response = _ssm_client.get_parameter(
+            Name="/sentinel/api_key_pepper", WithDecryption=True
+        )
+        value = response.get("Parameter", {}).get("Value")
+    except (ClientError, BotoCoreError) as exc:  # pragma: no cover - AWS error passthrough
+        logger.error("Failed to load API key pepper from SSM: %s", exc)
+        raise RuntimeError("Unable to load API key pepper from SSM") from exc
+
+    if not value:
+        logger.error("Received empty API key pepper from SSM")
+        raise RuntimeError("API key pepper not configured in SSM")
+
+    return value
+
+
 @dataclass
 class Settings:
     """Application configuration loaded from environment variables."""
@@ -133,7 +153,7 @@ class Settings:
     api_base_url: str = os.getenv("API_BASE_URL", "http://localhost:8000")
 
     # API key authentication
-    api_key_pepper: str = os.getenv("API_KEY_PEPPER", "")
+    api_key_pepper: str = ""
     require_api_key: bool = _get_bool(
         "REQUIRE_API_KEY",
         default=os.getenv("SENTINELAI_ENV", "local").lower()
@@ -149,4 +169,9 @@ try:
 except RuntimeError:
     logger.warning("OpenAI API key not available at import time")
 
-__all__ = ["settings", "Settings", "get_openai_api_key"]
+try:
+    settings.api_key_pepper = get_api_key_pepper()
+except RuntimeError:
+    logger.warning("API key pepper not available at import time")
+
+__all__ = ["settings", "Settings", "get_openai_api_key", "get_api_key_pepper"]
