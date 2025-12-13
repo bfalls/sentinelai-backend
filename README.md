@@ -157,6 +157,34 @@ ADSB_DEFAULT_RADIUS_NM=25
 ADSB_TIMEOUT=10
 ```
 
+### API key authentication
+
+All API routes (except `GET /healthz`) require an API key provided via the
+`X-Sentinel-API-Key` header. Keys are hashed at rest using HMAC-SHA256 with a
+server-side pepper; the plaintext key is only shown when created.
+
+Environment flags:
+
+- `API_KEY_PEPPER` (required when `REQUIRE_API_KEY` is true)
+- `REQUIRE_API_KEY` (defaults to `true` in `SENTINELAI_ENV=prod`, otherwise
+  `false`)
+
+Test-only keys begin with `sk_test_` and are only accepted when
+`SENTINELAI_ENV=test`.
+
+Admin CLI:
+
+```bash
+# Create a new key (prints plaintext once)
+python scripts/admin_api_keys.py create --email user@example.com --label "TAK plugin"
+
+# List active keys
+python scripts/admin_api_keys.py list
+
+# Revoke by prefix
+python scripts/admin_api_keys.py revoke --prefix abcd1234 --yes
+```
+
 Enable ADS-B ingestion by setting `ENABLE_ADSB_INGESTOR=true`. The default endpoint uses the unauthenticated OpenSky REST feed and does not require any credentials.
 
 ### APRS-IS ingestion

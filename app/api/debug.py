@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.config import settings
 from app.services import analyze_mission_context
+from app.security import require_api_key
 
-router = APIRouter(prefix="/debug", tags=["debug"])
+router = APIRouter(
+    prefix="/debug", tags=["debug"], dependencies=[Depends(require_api_key)]
+)
 
 logger = logging.getLogger("sentinelai.debug")
 
