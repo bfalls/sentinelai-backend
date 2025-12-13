@@ -104,7 +104,9 @@ def cmd_list(args) -> None:
             for key in keys
         ]
 
-        if args.json:
+        if len(keys) == 0:
+            print("No API keys found.")
+        elif args.json:
             print(json.dumps(output, indent=2))
         else:
             for item in output:
