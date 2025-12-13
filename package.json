@@ -4,9 +4,8 @@
   "description": "Backend service for **SentinelAI**, an AI-assisted situational awareness plugin for CivTAK.   It ingests real-world data feeds (e.g. aviation, ground tracks, weather), keeps a live in-memory view of the world, and exposes an API that turns **natural language requests** into **map overlays** for the CivTAK plugin.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "api-dev": "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env.dev",
-    "api-test": "python -m pytest -q --color=yes",
+    "test": "python -m pytest -q --color=yes",
     "api-test-verbose": "python -m pytest -vv",
     "api-test-ingestors": "python -m scripts.tests.run_ingestors_live_test",
     "api-test-aprs-live": "python -m scripts.tests.run_aprs_live_test",
