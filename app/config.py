@@ -73,6 +73,24 @@ def get_api_key_pepper() -> str:
 
     return value
 
+@lru_cache(maxsize=1)
+def get_ingestor_api_key() -> str:
+    """Fetch the ingestor API key from AWS SSM Parameter Store."""
+
+    try:
+        response = _ssm_client.get_parameter(
+            Name="/sentinel/ingestor_api_key", WithDecryption=True
+        )
+        value = response.get("Parameter", {}).get("Value")
+    except (ClientError, BotoCoreError) as exc:  # pragma: no cover - AWS error passthrough
+        logger.error("Failed to load ingestor API key from SSM: %s", exc)
+        raise RuntimeError("Unable to load ingestor API key from SSM") from exc
+
+    if not value:
+        logger.error("Received empty ingestor API key from SSM")
+        raise RuntimeError("Ingestor API key not configured in SSM")
+
+    return value
 
 @dataclass
 class Settings:
@@ -129,31 +147,17 @@ class Settings:
     aprs_passcode: str | None = os.getenv("APRS_PASSCODE")
     _aprs_lat = os.getenv("APRS_FILTER_CENTER_LAT")
     aprs_filter_center_lat: float | None = float(_aprs_lat) if _aprs_lat else None # this pattern avoids Pylance (reportArgumentType) errors
-    # aprs_filter_center_lat: float | None = (
-    #     float(os.getenv("APRS_FILTER_CENTER_LAT"))
-    #     if os.getenv("APRS_FILTER_CENTER_LAT")
-    #     else None
-    # )
     _aprs_lon = os.getenv("APRS_FILTER_CENTER_LON")
     aprs_filter_center_lon: float | None = float(_aprs_lon) if _aprs_lon else None
-    # aprs_filter_center_lon: float | None = (
-    #     float(os.getenv("APRS_FILTER_CENTER_LON"))
-    #     if os.getenv("APRS_FILTER_CENTER_LON")
-    #     else None
-    # )
     _aprs_radius = os.getenv("APRS_FILTER_RADIUS_KM")
     aprs_filter_radius_km: float | None = float(_aprs_radius) if _aprs_radius else None
-    # aprs_filter_radius_km: float | None = (
-    #     float(os.getenv("APRS_FILTER_RADIUS_KM"))
-    #     if os.getenv("APRS_FILTER_RADIUS_KM")
-    #     else None
-    # )
     aprs_filter: str | None = os.getenv("APRS_FILTER")
 
     api_base_url: str = os.getenv("API_BASE_URL", "http://localhost:8000")
 
     # API key authentication
     api_key_pepper: str = ""
+    ingestor_api_key: str = ""
     require_api_key: bool = _get_bool(
         "REQUIRE_API_KEY",
         default=os.getenv("SENTINELAI_ENV", "local").lower()
@@ -173,5 +177,10 @@ try:
     settings.api_key_pepper = get_api_key_pepper()
 except RuntimeError:
     logger.warning("API key pepper not available at import time")
+    
+try:
+    settings.ingestor_api_key = get_ingestor_api_key()
+except RuntimeError:
+    logger.warning("Ingestor API key not available at import time")
 
-__all__ = ["settings", "Settings", "get_openai_api_key", "get_api_key_pepper"]
+__all__ = ["settings", "Settings", "get_openai_api_key", "get_api_key_pepper", "get_ingestor_api_key"]
