@@ -12,6 +12,9 @@ from typing import AsyncIterator, Callable
 
 import httpx
 
+from app.config import settings
+from app.security.api_keys import API_KEY_HEADER
+
 logger = logging.getLogger("sentinelai.ingestors.aprs")
 
 
@@ -132,12 +135,14 @@ class APRSIngestor:
         *,
         config: APRSConfig,
         http_client: httpx.AsyncClient,
+        api_key: str | None = None,
         events_path: str = "/api/v1/events",
         line_source: Callable[[], AsyncIterator[str]] | None = None,
         stop_on_source: bool = False,
     ) -> None:
         self.config = config
         self.http_client = http_client
+        self.api_key = api_key or settings.ingestor_api_key
         self.events_path = events_path
         self.line_source = line_source
         self.stop_on_source = stop_on_source
@@ -248,7 +253,10 @@ class APRSIngestor:
         }
 
         try:
-            response = await self.http_client.post(self.events_path, json=payload)
+            headers = {API_KEY_HEADER: self.api_key} if self.api_key else None
+            response = await self.http_client.post(
+                self.events_path, json=payload, headers=headers
+            )
             if response.status_code >= 400:
                 logger.warning(
                     "Failed to post APRS event: status=%s body=%s",

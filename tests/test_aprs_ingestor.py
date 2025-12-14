@@ -2,10 +2,12 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
+import anyio
 import httpx
 import pytest
 
 from app.ingestors.aprs import APRSConfig, APRSIngestor, parse_aprs_packet
+from app.security.api_keys import API_KEY_HEADER
 
 
 def test_parse_aprs_packet_parses_position():
@@ -49,13 +51,16 @@ async def test_aprs_ingestor_posts_events(monkeypatch):
         ingestor = APRSIngestor(
             config=config,
             http_client=client,
+            api_key="test_ingestor_key",
             line_source=fake_line_source,
             stop_on_source=True,
         )
 
-        await ingestor.run()
+        with anyio.fail_after(5):
+            await ingestor.run()
 
     assert len(captured) == 1
+    assert captured[0].headers.get(API_KEY_HEADER) == "test_ingestor_key"
     body = json.loads(captured[0].content.decode())
     assert body["event_type"] == "aprs"
     assert body["event_metadata"]["source_callsign"] == "N0CALL"
