@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/sentinelai-banner.png" alt="SentinelAI for CivTAK" width="100%">
+</p>
+
 # SentinelAI Server
 
 **AI orchestration and mission analysis service for the SentinelAI CivTAK plugin.**
