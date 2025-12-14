@@ -24,6 +24,7 @@
     "ec2-restart": "aws ec2 stop-instances --instance-ids \"$(aws ec2 describe-instances --filters 'Name=tag:Name,Values=sentinelai' --query 'Reservations[0].Instances[0].InstanceId' --output text)\" && aws ec2 start-instances --instance-ids \"$(aws ec2 describe-instances --filters 'Name=tag:Name,Values=sentinelai' --query 'Reservations[0].Instances[0].InstanceId' --output text)\"",
     "ec2-public-dns": "aws ec2 describe-instances --filters 'Name=tag:Name,Values=sentinelai' 'Name=instance-state-name,Values=running' --query 'Reservations[0].Instances[0].PublicDnsName' --output text",
     "ec2-public-ip": "aws ec2 describe-instances --filters 'Name=tag:Name,Values=sentinelai' 'Name=instance-state-name,Values=running' --query 'Reservations[0].Instances[0].PublicIpAddress' --output text",
+    "ec2-sentinel-admin-api-keys": "bash -lc './scripts/ssh-aws.sh -- /usr/local/bin/sentinel-admin-api-keys \"$@\"' --",
     "ssh-ec2": "scripts/ssh-aws.sh",
     "monitor-aprs": "bash scripts/aprs-monitor.sh",
     "monitor-adsb": "curl -s \"https://opensky-network.org/api/states/all?lamin=42&lomin=-119&lamax=45&lomax=-115\" | JQ_COLORS=\"38;5;240:0;31:0;34:38;5;180:38;5;30:38;5;125:38;5;93\" jq -C .",

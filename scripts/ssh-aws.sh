@@ -17,4 +17,8 @@ if [ -z "$HOST" ] || [ "$HOST" = "None" ]; then
   exit 1
 fi
 
-ssh -i "$KEY_PATH" "${USER}@${HOST}"
+if [[ $# -gt 0 ]]; then
+  ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "$USER@$HOST" "$@"
+else
+  ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${USER}@${HOST}"
+fi
